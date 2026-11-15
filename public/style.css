@@ -234,3 +234,4 @@ h1,h2,h3{margin:0;letter-spacing:-.02em}
 .svc .si{width:30px;height:30px;display:block}
 .steps p{margin:0}
 .qual{height:32px;border-radius:var(--radius);border:1px solid var(--border);background:var(--background);color:var(--foreground);padding:0 8px;font:inherit;font-size:13px;cursor:pointer}
+.install-msg{margin:0;font-size:15px;line-height:1.5}

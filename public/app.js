@@ -743,7 +743,18 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instal
 window.addEventListener('appinstalled', () => { $('#installBtn').classList.add('hidden'); toast('App instalado!'); });
 $('#installBtn').onclick = async () => {
   if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice; if (r.outcome === 'accepted') $('#installBtn').classList.add('hidden'); installEvt = null; }
-  else $('#installModal').classList.remove('hidden');
+  else {
+    // mostra só a instrução do aparelho/navegador atual
+    const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), android = /Android/.test(ua), tv = /TV|SMART-TV|SmartTV|AFT|CrKey|Web0S|Tizen/i.test(ua);
+    const opera = /OPR\/|Opera/.test(ua), firefox = /Firefox/.test(ua), samsung = /SamsungBrowser/.test(ua), edge = /Edg\//.test(ua);
+    let k, msg;
+    if (tv) { k = 'tv'; msg = 'Na TV, use o site direto pelo navegador dela, ou espelhe do celular/PC com Chromecast.'; }
+    else if (ios) { k = 'iphone'; msg = /CriOS|FxiOS|OPT\//.test(ua) ? 'No iPhone, abra este site no Safari e toque em Compartilhar → “Adicionar à Tela de Início”.' : 'Toque no botão Compartilhar (quadrado com seta) → “Adicionar à Tela de Início”.'; }
+    else if (android) { k = 'android'; msg = samsung ? 'Toque no menu ☰ → “Adicionar página a” → “Tela inicial”.' : firefox || opera ? 'Toque no menu ⋮ → “Adicionar à tela inicial”.' : 'Toque no menu ⋮ → “Instalar app” ou “Adicionar à tela inicial”.'; }
+    else { k = 'pc'; msg = opera || firefox ? `O ${opera ? 'Opera' : 'Firefox'} não instala apps no computador. Abra ${location.host} no Chrome ou Edge e clique em “Instalar app”.` : edge ? 'Clique no ícone de instalar na barra de endereço, ou menu ⋯ → Apps → “Instalar Watch Party”.' : 'Clique no ícone de instalar na barra de endereço, ou menu ⋮ → “Transmitir, salvar e compartilhar” → “Instalar página como app”.'; }
+    $('#installMsg').textContent = msg;
+    $('#installModal').classList.remove('hidden');
+  }
 };
 
 // ---------- BOOT ----------
