@@ -3,12 +3,23 @@ const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
 const { Server } = require('socket.io');
+const { ytSearch, driveFolder } = require('./yt');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 1e6 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/api/yt', async (req, res) => {
+  const q = String(req.query.q || '').slice(0, 120).trim();
+  if (!q) return res.json([]);
+  try { res.json(await ytSearch(q, String(req.query.f || ''))); } catch (e) { res.status(502).json({ error: 'busca falhou' }); }
+});
+app.get('/api/drive', async (req, res) => {
+  const id = String(req.query.id || '');
+  if (!/^[\w-]{10,}$/.test(id)) return res.status(400).json({ error: 'id inválido' });
+  try { res.json(await driveFolder(id)); } catch (e) { res.status(502).json({ error: e.message }); }
+});
 app.get('/r/:id', (_, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const rooms = new Map();

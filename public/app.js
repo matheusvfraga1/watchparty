@@ -135,6 +135,7 @@ socket.on('react', ({ emoji }) => {
 $$('[data-open-add]').forEach(b => b.onclick = () => {
   if (!canControl()) return toast('Só o anfitrião pode trocar o vídeo');
   $('#addModal').classList.remove('hidden');
+  if (!ytLast) $('#ytChips button').click();
 });
 $$('[data-close]').forEach(b => b.onclick = () => b.closest('.modal').classList.add('hidden'));
 $$('.modal').forEach(m => m.onclick = e => e.target === m && m.classList.add('hidden'));
@@ -145,24 +146,116 @@ $$('.src-tabs button').forEach(b => b.onclick = () => {
 const closeAdd = () => $('#addModal').classList.add('hidden');
 
 function ytId(u) {
-  const m = String(u).match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/) || String(u).trim().match(/^([\w-]{11})$/);
+  const m = String(u).match(/(?:youtu\.be\/|v=|\/shorts\/|\/embed\/|\/live\/)([\w-]{11})/);
   return m && m[1];
 }
-function driveId(u) { const m = String(u).match(/\/d\/([\w-]{20,})/) || String(u).match(/[?&]id=([\w-]{20,})/); return m && m[1]; }
+function driveId(u) { const m = String(u).match(/\/(?:d|folders)\/([\w-]{20,})/) || String(u).match(/[?&]id=([\w-]{20,})/); return m && m[1]; }
+const playYT = (id, title) => { socket.emit('media:set', { type: 'youtube', src: id, title: title || 'YouTube', kind: 'youtube' }); closeAdd(); };
+const playDrive = (id, title) => { socket.emit('media:set', { type: 'video', src: `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`, title: title || 'Google Drive', kind: 'drive' }); closeAdd(); };
+const api = (u) => fetch(u).then(r => r.ok ? r.json() : Promise.reject(new Error('erro')));
 
-$('#ytGo').onclick = () => {
-  const id = ytId($('#ytUrl').value); if (!id) return toast('Link do YouTube inválido');
-  socket.emit('media:set', { type: 'youtube', src: id, title: 'YouTube', kind: 'youtube' }); $('#ytUrl').value = ''; closeAdd();
+// YouTube: busca e categorias
+const CHIPS = [
+  ['🎬 Filmes completos', 'filme completo dublado', 'long'], ['🍿 Lançamentos', 'filme lançamento 2026 completo dublado', 'long'],
+  ['😂 Comédia', 'filme de comédia completo dublado', 'long'], ['💥 Ação', 'filme de ação completo dublado', 'long'],
+  ['👻 Terror', 'filme de terror completo dublado', 'long'], ['🧸 Desenhos', 'desenho animado completo dublado', 'long'],
+  ['🎞️ Trailers', 'trailer oficial dublado 2026', 'video'], ['🎵 Música', 'clipes mais tocados brasil', 'video'],
+  ['⚽ Futebol', 'melhores momentos futebol', 'video'], ['🔴 Ao vivo', 'ao vivo agora', 'live'],
+];
+let ytLast = null;
+function ytLoad(q, f = 'video', chip) {
+  ytLast = q + f;
+  $$('#ytChips button').forEach(b => b.classList.toggle('on', b === chip));
+  const box = $('#ytResults'); box.innerHTML = '<div class="loading">Carregando...</div>';
+  const key = ytLast;
+  api(`/api/yt?q=${encodeURIComponent(q)}&f=${f}`).then(items => {
+    if (key !== ytLast) return;
+    box.innerHTML = items.length ? '' : '<div class="loading">Nada encontrado.</div>';
+    items.forEach(v => {
+      const d = document.createElement('div'); d.className = 'vcard';
+      d.innerHTML = `<div class="th"><img loading="lazy" src="${esc(v.thumb)}" alt="">${v.duration ? `<span class="dur">${esc(v.duration)}</span>` : v.live ? '<span class="dur live">AO VIVO</span>' : ''}</div><div class="info"><b>${esc(v.title)}</b><small>${esc(v.channel)}${v.views ? ' · ' + esc(v.views) : ''}</small></div>`;
+      d.onclick = () => playYT(v.id, v.title);
+      box.appendChild(d);
+    });
+  }).catch(() => { if (key === ytLast) box.innerHTML = '<div class="loading">Não deu pra buscar agora. Tente de novo.</div>'; });
+}
+CHIPS.forEach(([label, q, f]) => {
+  const b = document.createElement('button'); b.textContent = label; b.onclick = () => { $('#ytQ').value = ''; ytLoad(q, f, b); };
+  $('#ytChips').appendChild(b);
+});
+$('#ytForm').onsubmit = e => {
+  e.preventDefault(); const v = $('#ytQ').value.trim(); if (!v) return;
+  const id = ytId(v); if (id) { $('#ytQ').value = ''; return playYT(id); }
+  ytLoad(v, 'video');
 };
-$('#driveGo').onclick = () => {
-  const id = driveId($('#driveUrl').value); if (!id) return toast('Link do Drive inválido');
-  socket.emit('media:set', { type: 'video', src: `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`, title: 'Google Drive', kind: 'drive' }); $('#driveUrl').value = ''; closeAdd();
+
+// Streaming: atalhos
+const SERVICES = [
+  ['Netflix', 'https://www.netflix.com/browse', '#e50914'], ['Prime Video', 'https://www.primevideo.com', '#00a8e1'],
+  ['Disney+', 'https://www.disneyplus.com', '#113ccf'], ['Max', 'https://play.max.com', '#002be7'],
+  ['Globoplay', 'https://globoplay.globo.com', '#fb0234'], ['Apple TV+', 'https://tv.apple.com', '#333'],
+  ['Paramount+', 'https://www.paramountplus.com/br/', '#0064ff'], ['Crunchyroll', 'https://www.crunchyroll.com', '#f47521'],
+  ['Pluto TV', 'https://pluto.tv/br', '#2d2d2d'], ['Twitch', 'https://www.twitch.tv', '#9146ff'],
+  ['Mercado Play', 'https://play.mercadolivre.com.br', '#2d3277'], ['Kick', 'https://kick.com', '#2a2a2a'],
+];
+SERVICES.forEach(([n, u, c]) => {
+  const b = document.createElement('button'); b.className = 'svc'; b.style.background = c; b.textContent = n;
+  b.onclick = () => { window.open(u, '_blank', 'noopener'); toast('Coloque o filme na outra aba e volte aqui para compartilhar', 4000); };
+  $('#services').appendChild(b);
+});
+
+// Google Drive: pastas
+const savedFolders = () => { try { return JSON.parse(store.get('driveFolders') || '[]'); } catch { return []; } };
+let driveStack = [];
+function renderSaved() {
+  const box = $('#driveSaved'); box.innerHTML = '';
+  savedFolders().forEach(f => {
+    const b = document.createElement('button'); b.innerHTML = `📁 ${esc(f.title)}<span class="x" title="Remover">✕</span>`;
+    b.onclick = e => {
+      if (e.target.classList.contains('x')) { store.set('driveFolders', JSON.stringify(savedFolders().filter(x => x.id !== f.id))); return renderSaved(); }
+      driveStack = []; openFolder(f.id);
+    };
+    box.appendChild(b);
+  });
+}
+function openFolder(id, title) {
+  const box = $('#driveList'); box.innerHTML = '<div class="loading">Carregando...</div>';
+  api('/api/drive?id=' + encodeURIComponent(id)).then(({ title: t, items }) => {
+    const idx = driveStack.findIndex(x => x.id === id);
+    if (idx >= 0) driveStack = driveStack.slice(0, idx + 1); else driveStack.push({ id, title: t || title });
+    if (driveStack.length === 1 && !savedFolders().find(x => x.id === id)) { store.set('driveFolders', JSON.stringify([{ id, title: t }, ...savedFolders()].slice(0, 12))); renderSaved(); }
+    $('#drivePath').innerHTML = '';
+    driveStack.forEach((f, i) => {
+      if (i) $('#drivePath').append(' › ');
+      const a = document.createElement('a'); a.textContent = f.title; a.onclick = () => openFolder(f.id); $('#drivePath').appendChild(a);
+    });
+    box.innerHTML = items.length ? '' : '<div class="loading">Pasta vazia (ou não é pública).</div>';
+    items.sort((a, b) => b.folder - a.folder || a.name.localeCompare(b.name, 'pt', { numeric: true }));
+    items.forEach(it => {
+      const d = document.createElement('div'); d.className = 'it';
+      d.innerHTML = `${it.folder ? '📁' : /\.(mp4|webm|mkv|mov|m4v|avi)$/i.test(it.name) ? '🎬' : '📄'}<span>${esc(it.name)}</span>${it.folder ? '›' : '▶'}`;
+      d.onclick = () => it.folder ? openFolder(it.id, it.name) : playDrive(it.id, it.name.replace(/\.[^.]+$/, ''));
+      box.appendChild(d);
+    });
+  }).catch(() => { box.innerHTML = '<div class="loading">Não consegui abrir. A pasta precisa estar como “Qualquer pessoa com o link”.</div>'; });
+}
+$('#driveForm').onsubmit = e => {
+  e.preventDefault(); const u = $('#driveUrl').value.trim(); const id = driveId(u);
+  if (!id) return toast('Link do Drive inválido');
+  $('#driveUrl').value = '';
+  if (/\/folders\//.test(u)) { driveStack = []; openFolder(id); } else playDrive(id);
 };
+renderSaved();
+
 $('#linkGo').onclick = () => {
   const u = $('#linkUrl').value.trim(); if (!/^https?:\/\//.test(u)) return toast('Link inválido');
-  if (ytId(u) && /youtu/.test(u)) { $('#ytUrl').value = u; return $('#ytGo').click(); }
-  if (driveId(u) && /drive\.google/.test(u)) { $('#driveUrl').value = u; return $('#driveGo').click(); }
-  socket.emit('media:set', { type: 'video', src: u, title: decodeURIComponent(u.split('/').pop().split('?')[0]) || 'Vídeo', kind: 'link' }); $('#linkUrl').value = ''; closeAdd();
+  $('#linkUrl').value = '';
+  if (/youtu/.test(u) && ytId(u)) return playYT(ytId(u));
+  if (/drive\.google/.test(u) && driveId(u)) {
+    if (!/\/folders\//.test(u)) return playDrive(driveId(u));
+    document.querySelector('[data-src=drive]').click(); driveStack = []; return openFolder(driveId(u));
+  }
+  socket.emit('media:set', { type: 'video', src: u, title: decodeURIComponent(u.split('/').pop().split('?')[0]) || 'Vídeo', kind: 'link' }); closeAdd();
 };
 $('#fileIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) startFileStream(f); };
 $('#screenGo').onclick = startScreenStream;

@@ -76,38 +76,47 @@
   </main>
 </section>
 
-<!-- ADD MEDIA MODAL -->
+<!-- EXPLORAR -->
 <div id="addModal" class="modal hidden">
-  <div class="sheet">
-    <div class="sheet-head"><b>O que vamos assistir?</b><button class="icon" data-close>✕</button></div>
+  <div class="sheet browse">
+    <div class="sheet-head"><b>Explorar</b><button class="icon" data-close>✕</button></div>
     <div class="src-tabs">
-      <button class="on" data-src="youtube">YouTube</button>
-      <button data-src="drive">Google Drive</button>
-      <button data-src="link">Link de vídeo</button>
-      <button data-src="file">Arquivo local</button>
-      <button data-src="screen">Netflix / outros</button>
+      <button class="on" data-src="youtube">▶ YouTube</button>
+      <button data-src="screen">🍿 Streaming</button>
+      <button data-src="drive">📁 Google Drive</button>
+      <button data-src="file">💻 Meu PC</button>
+      <button data-src="link">🔗 Link</button>
     </div>
+
     <div class="src-body" data-body="youtube">
-      <input id="ytUrl" placeholder="Cole o link do YouTube">
-      <button class="primary" id="ytGo">Assistir</button>
+      <form id="ytForm" class="row"><input id="ytQ" placeholder="Buscar no YouTube ou colar link" autocomplete="off"><button class="primary">Buscar</button></form>
+      <div class="chips" id="ytChips"></div>
+      <div id="ytResults" class="grid"></div>
     </div>
-    <div class="src-body hidden" data-body="drive">
-      <input id="driveUrl" placeholder="Link de compartilhamento do Google Drive">
-      <p class="hint">O arquivo precisa estar como “Qualquer pessoa com o link”. Formatos: MP4/WebM.</p>
-      <button class="primary" id="driveGo">Assistir</button>
-    </div>
-    <div class="src-body hidden" data-body="link">
-      <input id="linkUrl" placeholder="https://.../video.mp4 ou .m3u8">
-      <button class="primary" id="linkGo">Assistir</button>
-    </div>
-    <div class="src-body hidden" data-body="file">
-      <p class="hint">O vídeo sai do seu aparelho e é transmitido ao vivo para todos (ninguém precisa ter o arquivo). Use no PC (Chrome/Edge/Firefox).</p>
-      <label class="filebtn primary">Escolher arquivo<input id="fileIn" type="file" accept="video/*,audio/*,.mkv" hidden></label>
-    </div>
+
     <div class="src-body hidden" data-body="screen">
-      <p class="hint">Netflix, Prime Video, Disney+, Max, Globoplay, Twitch etc.: abra o filme em outra aba do Chrome e compartilhe essa aba marcando <b>“Compartilhar áudio da aba”</b>.</p>
+      <p class="hint">Escolha o serviço: ele abre em outra aba. Coloque o filme lá e volte aqui para compartilhar a aba (marque <b>“Compartilhar áudio da aba”</b>). Só no PC.</p>
+      <div id="services" class="services"></div>
+      <button class="primary" id="screenGo">📺 Compartilhar aba agora</button>
       <p class="hint">Tela preta? No Chrome: Configurações → Sistema → desligue <b>“Usar aceleração gráfica”</b> e reinicie.</p>
-      <button class="primary" id="screenGo">Compartilhar aba / tela</button>
+    </div>
+
+    <div class="src-body hidden" data-body="drive">
+      <form id="driveForm" class="row"><input id="driveUrl" placeholder="Link de uma pasta ou arquivo do Drive" autocomplete="off"><button class="primary">Abrir</button></form>
+      <p class="hint">Pasta/arquivo como “Qualquer pessoa com o link”. Suas pastas ficam salvas aqui.</p>
+      <div class="chips" id="driveSaved"></div>
+      <div id="drivePath" class="crumbs"></div>
+      <div id="driveList" class="list"></div>
+    </div>
+
+    <div class="src-body hidden" data-body="file">
+      <p class="hint">O vídeo sai do seu PC e é transmitido ao vivo para todos (ninguém precisa ter o arquivo). Chrome/Edge/Firefox no PC.</p>
+      <label class="filebtn primary">Escolher arquivo do PC<input id="fileIn" type="file" accept="video/*,audio/*,.mkv" hidden></label>
+    </div>
+
+    <div class="src-body hidden" data-body="link">
+      <input id="linkUrl" placeholder="YouTube, Drive ou link direto .mp4 / .m3u8">
+      <button class="primary" id="linkGo">Assistir</button>
     </div>
   </div>
 </div>
