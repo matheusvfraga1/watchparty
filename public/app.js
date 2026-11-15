@@ -2,6 +2,7 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const socket = io();
+const CID = (() => { try { let c = localStorage.getItem('cid'); if (!c) { c = crypto.randomUUID?.() || String(Math.random()).slice(2); localStorage.setItem('cid', c); } return c; } catch { return 'x' + Math.random(); } })();
 const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
 const toast = (t, ms = 2600) => { const el = $('#toast'); el.textContent = t; el.classList.remove('hidden'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.add('hidden'), ms); };
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -24,7 +25,7 @@ const getNick = () => {
 $('#createBtn').onclick = () => {
   const nick = getNick(); if (!nick) return;
   const password = $('#roomPass').value;
-  socket.emit('room:create', { name: $('#roomName').value || `Sala de ${nick}`, isPublic: visibility === 'public', password, everyoneControls: $('#everyone').checked }, ({ id }) => join(id, password));
+  socket.emit('room:create', { cid: CID, name: $('#roomName').value || `Sala de ${nick}`, isPublic: visibility === 'public', password, everyoneControls: $('#everyone').checked }, ({ id }) => join(id, password));
 };
 $('#joinBtn').onclick = () => { const c = $('#joinCode').value.trim(); if (c) join(c); };
 $('#joinCode').onkeydown = e => e.key === 'Enter' && $('#joinBtn').click();
@@ -53,7 +54,7 @@ const canControl = () => R && (R.everyoneControls || isHost());
 
 function join(id, password) {
   const nick = getNick(); if (!nick) return;
-  socket.emit('room:join', { id, nick, password }, (res) => {
+  socket.emit('room:join', { id, nick, password, cid: CID }, (res) => {
     if (res.needPassword) { const p = prompt(password ? 'Senha incorreta. Tente de novo:' : 'Sala com senha:'); if (p != null) join(id, p); return; }
     if (res.error) {
       toast(res.error === 'Sala não encontrada' ? 'Essa sala foi encerrada.' : res.error);
@@ -66,7 +67,7 @@ function join(id, password) {
     $('#home').classList.add('hidden'); $('#room').classList.remove('hidden');
     $('#msgs').innerHTML = ''; R.messages.forEach(addMsg);
     renderHeader(); renderUsers();
-    loadMedia(R.media, R.playback, Date.now());
+    loadMedia(R.media, R.playback, Date.now()); renderQual();
   });
 }
 function leaveRoom() {
@@ -107,7 +108,7 @@ $('#inviteBtn').onclick = async () => {
 $('#settingsBtn').onclick = () => {
   $('#setPublic').checked = R.isPublic; $('#setEveryone').checked = R.everyoneControls;
   $('#setPublic').disabled = $('#setEveryone').disabled = !isHost();
-  $('#setHint').textContent = isHost() ? 'Você é o anfitrião.' : 'Só o anfitrião pode mudar.';
+  $('#setHint').textContent = isHost() ? 'Você é o anfitrião.' : `Só o anfitrião (${R.users.find(u => u.id === R.hostId)?.name || '?'}) pode mudar.`;
   $('#setModal').classList.remove('hidden');
 };
 $('#setPublic').onchange = e => socket.emit('room:settings', { isPublic: e.target.checked });
@@ -548,7 +549,7 @@ function loadMedia(media, pb, recvAt) {
     else { vid.controls = true; requestStream(); }
   }
 }
-socket.on('media', ({ media, streamer, playback }) => { if (!R) return; R.media = media; R.streamer = streamer; loadMedia(media, playback, Date.now()); });
+socket.on('media', ({ media, streamer, playback }) => { if (!R) return; R.media = media; R.streamer = streamer; $('#qualSel').dataset.v = 'auto'; loadMedia(media, playback, Date.now()); renderQual(); });
 
 // tempo/estado local
 function getTime() { return mode === 'youtube' ? (ytReady ? yt.getCurrentTime() : 0) : vid.currentTime; }
@@ -618,18 +619,51 @@ let localStream = null, localStreamVideo = null; // host
 const hostPcs = new Map(); // viewerId -> pc
 let viewerPc = null;
 
+// ---- Qualidade da transmissão ----
+const QUAL = { auto: null, '1080': { h: 1080, br: 4_500_000 }, '720': { h: 720, br: 2_200_000 }, '480': { h: 480, br: 1_000_000 }, '360': { h: 360, br: 550_000 } };
+let hostQual = (() => { try { return localStorage.getItem('hostQual') || 'auto'; } catch { return 'auto'; } })();
+const viewerQual = new Map(); // viewerId -> qualidade pedida pelo convidado
+function applyQuality(viewerId) {
+  const pc = hostPcs.get(viewerId); if (!pc) return;
+  // vale a menor entre a do anfitrião e a pedida pelo convidado
+  const order = ['360', '480', '720', '1080'];
+  const vq = viewerQual.get(viewerId), hq = hostQual === 'auto' ? '1080' : hostQual;
+  const q = QUAL[vq && vq !== 'auto' && order.indexOf(vq) < order.indexOf(hq) ? vq : hq];
+  pc.getSenders().forEach(snd => {
+    if (snd.track?.kind !== 'video') return;
+    const p = snd.getParameters(); p.encodings = p.encodings?.length ? p.encodings : [{}];
+    const th = snd.track.getSettings().height || q.h;
+    p.encodings[0].maxBitrate = q.br; p.encodings[0].maxFramerate = 30;
+    p.encodings[0].scaleResolutionDownBy = Math.max(1, th / q.h);
+    p.degradationPreference = 'balanced';
+    snd.setParameters(p).catch(() => {});
+  });
+}
+function renderQual() {
+  const sel = $('#qualSel'); if (!sel) return;
+  const streamingMine = mode === 'stream' && localStream, watching = mode === 'stream' && !localStream;
+  sel.classList.toggle('hidden', !(streamingMine || watching));
+  sel.title = streamingMine ? 'Qualidade que você envia' : 'Qualidade que você recebe';
+  sel.value = streamingMine ? hostQual : (sel.dataset.v || 'auto');
+}
+$('#qualSel').onchange = e => {
+  const v = e.target.value;
+  if (localStream) { hostQual = v; try { localStorage.setItem('hostQual', v); } catch {} hostPcs.forEach((_, id) => applyQuality(id)); toast('Qualidade da transmissão: ' + (v === 'auto' ? 'automática' : v + 'p')); }
+  else if (R?.streamer) { e.target.dataset.v = v; socket.emit('rtc:signal', { to: R.streamer, data: { quality: v } }); toast('Qualidade: ' + (v === 'auto' ? 'automática' : v + 'p')); }
+};
+
 function makeHostPc(viewerId) {
   hostPcs.get(viewerId)?.close();
   const pc = new RTCPeerConnection(ICE); hostPcs.set(viewerId, pc);
   localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-  pc.getSenders().forEach(s => { if (s.track?.kind === 'video') { const p = s.getParameters(); p.encodings = p.encodings?.length ? p.encodings : [{}]; p.encodings[0].maxBitrate = 6_000_000; s.setParameters(p).catch(() => {}); } });
   pc.onicecandidate = e => e.candidate && socket.emit('rtc:signal', { to: viewerId, data: { candidate: e.candidate } });
   pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState)) hostPcs.delete(viewerId); };
-  pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => socket.emit('rtc:signal', { to: viewerId, data: { sdp: pc.localDescription } }));
+  pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => { socket.emit('rtc:signal', { to: viewerId, data: { sdp: pc.localDescription } }); applyQuality(viewerId); });
+  pc.addEventListener('connectionstatechange', () => pc.connectionState === 'connected' && applyQuality(viewerId));
 }
 socket.on('stream:stop', () => stopStreaming(true));
 socket.on('rtc:want', viewerId => { if (localStream) makeHostPc(viewerId); });
-socket.on('rtc:gone', id => { hostPcs.get(id)?.close(); hostPcs.delete(id); });
+socket.on('rtc:gone', id => { hostPcs.get(id)?.close(); hostPcs.delete(id); viewerQual.delete(id); });
 
 function requestStream() { socket.emit('rtc:want'); }
 function closeViewerPc() { if (viewerPc) { viewerPc.close(); viewerPc = null; } }
@@ -637,6 +671,7 @@ function closeViewerPc() { if (viewerPc) { viewerPc.close(); viewerPc = null; } 
 socket.on('rtc:signal', async ({ from, data }) => {
   if (localStream && hostPcs.has(from)) { // sou o host
     const pc = hostPcs.get(from);
+    if (data.quality && (data.quality in QUAL)) { viewerQual.set(from, data.quality); applyQuality(from); return; }
     if (data.sdp) await pc.setRemoteDescription(data.sdp).catch(() => {});
     else if (data.candidate) await pc.addIceCandidate(data.candidate).catch(() => {});
     return;
@@ -681,7 +716,7 @@ function startFileStream(file) {
 async function startScreenStream() {
   if (!navigator.mediaDevices?.getDisplayMedia) return toast('Compartilhar tela só funciona no navegador do PC.', 4000);
   try {
-    const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, preferCurrentTab: false, selfBrowserSurface: 'exclude', systemAudio: 'include' });
+    const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 }, width: { ideal: 1920, max: 1920 }, height: { ideal: 1080, max: 1080 } }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, preferCurrentTab: false, selfBrowserSurface: 'exclude', systemAudio: 'include' });
     stopStreaming(true); closeAdd();
     localStream = s;
     s.getVideoTracks()[0].contentHint = 'motion';

@@ -90,7 +90,7 @@ io.on('connection', (socket) => {
       everyoneControls: d?.everyoneControls !== false,
       hostId: null, streamer: null, users: new Map(), messages: [],
       media: null, playback: { playing: false, time: 0, ts: Date.now(), rate: 1 },
-      emptySince: Date.now(),
+      emptySince: Date.now(), owner: clean(d?.cid, 40) || null,
     });
     cb({ id });
     broadcastList();
@@ -108,7 +108,9 @@ io.on('connection', (socket) => {
     socket.join(r.id);
     const name = clean(d?.nick, 24) || 'Convidado';
     r.users.set(socket.id, { name, color: COLORS[r.users.size % COLORS.length] });
-    if (!r.hostId) r.hostId = socket.id;
+    const cid = clean(d?.cid, 40);
+    // o criador da sala volta a ser anfitrião ao reconectar
+    if (!r.hostId || (cid && cid === r.owner)) r.hostId = socket.id;
     r.emptySince = null;
     cb({ ok: true, me: socket.id, state: snapshot(r) });
     pushUsers(r);
