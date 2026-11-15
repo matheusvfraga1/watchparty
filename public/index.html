@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cut">
+<meta name="theme-color" content="#0d0d14">
+<title>Sessão</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- HOME -->
+<section id="home" class="view">
+  <header class="brand"><img src="/icon.svg" alt=""><h1>Sessão</h1><span>assista junto, ao vivo</span></header>
+  <div class="home-grid">
+    <div class="card">
+      <label>Seu apelido<input id="nick" maxlength="24" placeholder="Ex.: Matheus"></label>
+      <h2>Criar sala</h2>
+      <label>Nome da sala<input id="roomName" maxlength="60" placeholder="Sessão de filme"></label>
+      <div class="seg" id="visSeg">
+        <button data-v="public" class="on">🌐 Aberta</button>
+        <button data-v="private">🔒 Privada</button>
+      </div>
+      <p class="hint" id="visHint">Aparece na lista para qualquer pessoa entrar.</p>
+      <label>Senha (opcional)<input id="roomPass" type="password" maxlength="40" placeholder="Sem senha"></label>
+      <label class="check"><input type="checkbox" id="everyone" checked> Todos podem controlar o vídeo</label>
+      <button class="primary" id="createBtn">Criar sala</button>
+      <div class="or">ou</div>
+      <div class="row"><input id="joinCode" maxlength="10" placeholder="Código da sala"><button id="joinBtn">Entrar</button></div>
+    </div>
+    <div class="card">
+      <h2>Salas abertas <span class="live-dot"></span></h2>
+      <div id="roomList" class="room-list"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROOM -->
+<section id="room" class="view hidden">
+  <header class="topbar">
+    <button class="icon" id="leaveBtn" title="Sair">←</button>
+    <div class="title"><b id="rTitle"></b><small id="rSub"></small></div>
+    <button id="inviteBtn">🔗 Convidar</button>
+    <button class="icon" id="settingsBtn" title="Configurações">⚙</button>
+  </header>
+  <main class="room-main">
+    <div class="stage-wrap">
+      <div id="stage" class="stage">
+        <div id="empty" class="empty">
+          <p>Nada tocando ainda.</p>
+          <button class="primary" data-open-add>+ Escolher o que assistir</button>
+        </div>
+        <div id="ytBox" class="layer hidden"><div id="yt"></div></div>
+        <video id="vid" class="layer hidden" playsinline controls></video>
+        <div id="tapSync" class="tap hidden">▶ Toque para entrar na sessão</div>
+        <div id="floaters"></div>
+      </div>
+      <div class="stagebar">
+        <span id="nowTitle" class="now"></span>
+        <div class="reacts">
+          <button data-r="😂">😂</button><button data-r="😱">😱</button><button data-r="❤️">❤️</button><button data-r="🔥">🔥</button><button data-r="👏">👏</button>
+        </div>
+        <button class="primary small" data-open-add>+ Vídeo</button>
+      </div>
+    </div>
+    <aside class="side">
+      <div class="tabs"><button class="on" data-tab="chat">Chat</button><button data-tab="people">Pessoas <span id="pCount"></span></button></div>
+      <div id="chatPane" class="pane">
+        <div id="msgs" class="msgs"></div>
+        <form id="chatForm" class="chatform"><input id="chatIn" maxlength="500" autocomplete="off" placeholder="Mensagem..."><button class="primary">➤</button></form>
+      </div>
+      <div id="peoplePane" class="pane hidden"><ul id="people" class="people"></ul></div>
+    </aside>
+  </main>
+</section>
+
+<!-- ADD MEDIA MODAL -->
+<div id="addModal" class="modal hidden">
+  <div class="sheet">
+    <div class="sheet-head"><b>O que vamos assistir?</b><button class="icon" data-close>✕</button></div>
+    <div class="src-tabs">
+      <button class="on" data-src="youtube">YouTube</button>
+      <button data-src="drive">Google Drive</button>
+      <button data-src="link">Link de vídeo</button>
+      <button data-src="file">Arquivo local</button>
+      <button data-src="screen">Netflix / outros</button>
+    </div>
+    <div class="src-body" data-body="youtube">
+      <input id="ytUrl" placeholder="Cole o link do YouTube">
+      <button class="primary" id="ytGo">Assistir</button>
+    </div>
+    <div class="src-body hidden" data-body="drive">
+      <input id="driveUrl" placeholder="Link de compartilhamento do Google Drive">
+      <p class="hint">O arquivo precisa estar como “Qualquer pessoa com o link”. Formatos: MP4/WebM.</p>
+      <button class="primary" id="driveGo">Assistir</button>
+    </div>
+    <div class="src-body hidden" data-body="link">
+      <input id="linkUrl" placeholder="https://.../video.mp4 ou .m3u8">
+      <button class="primary" id="linkGo">Assistir</button>
+    </div>
+    <div class="src-body hidden" data-body="file">
+      <p class="hint">O vídeo sai do seu aparelho e é transmitido ao vivo para todos (ninguém precisa ter o arquivo). Use no PC (Chrome/Edge/Firefox).</p>
+      <label class="filebtn primary">Escolher arquivo<input id="fileIn" type="file" accept="video/*,audio/*,.mkv" hidden></label>
+    </div>
+    <div class="src-body hidden" data-body="screen">
+      <p class="hint">Netflix, Prime Video, Disney+, Max, Globoplay, Twitch etc.: abra o filme em outra aba do Chrome e compartilhe essa aba marcando <b>“Compartilhar áudio da aba”</b>.</p>
+      <p class="hint">Tela preta? No Chrome: Configurações → Sistema → desligue <b>“Usar aceleração gráfica”</b> e reinicie.</p>
+      <button class="primary" id="screenGo">Compartilhar aba / tela</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="setModal" class="modal hidden">
+  <div class="sheet">
+    <div class="sheet-head"><b>Sala</b><button class="icon" data-close>✕</button></div>
+    <p class="hint" id="setHint"></p>
+    <label class="check"><input type="checkbox" id="setPublic"> Sala aberta (aparece na lista)</label>
+    <label class="check"><input type="checkbox" id="setEveryone"> Todos podem controlar o vídeo</label>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
