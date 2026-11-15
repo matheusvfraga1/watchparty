@@ -84,7 +84,7 @@ socket.on('connect', () => { if (R) { const id = R.id, pw = R._pw; R = null; sto
 function renderHeader() {
   $('#rTitle').textContent = R.name;
   $('#rSub').textContent = `${R.isPublic ? 'Aberta' : 'Privada'} · código ${R.id}${isHost() ? ' · você é o anfitrião' : ''}${R.everyoneControls ? '' : ' · só o anfitrião controla'}`;
-  document.title = R.name + ' · Sessão';
+  document.title = R.name + ' · Watch Party';
 }
 function renderUsers() {
   $('#pCount').textContent = R.users.length;
@@ -138,7 +138,7 @@ $('#chatForm').onsubmit = e => { e.preventDefault(); const v = $('#chatIn').valu
 const EMOJIS = {
   'Rostos': '😂🤣😅😊😍🥰😘😎🤩🥳😏😴🥱🤔🤨😐🙄😬😮😱😳🥺😭😢😤😡🤯🤬🤡💀👻🤢🤮😈🫠🫣🫡🤫🤭',
   'Gestos': '👍👎👏🙌🙏👀💪🤝✌️🤞👋🫶❤️🔥💯✨🎉💔💩',
-  'Sessão': '🍿🎬📺🎥🍕🍔🍟🥤🍺🍷☕🛋️🌙⚽🎮🎵',
+  'Filme': '🍿🎬📺🎥🍕🍔🍟🥤🍺🍷☕🛋️🌙⚽🎮🎵',
 };
 const FLUENT = 'https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/';
 const STICKERS = ['Face with tears of joy', 'Rolling on the floor laughing', 'Smiling face with heart-eyes', 'Loudly crying face', 'Face screaming in fear', 'Exploding head', 'Skull', 'Ghost', 'Popcorn', 'Fire', 'Red heart', 'Clapping hands*', 'Thumbs up*', 'Party popper', 'Sleeping face', 'Yawning face', 'Thinking face', 'Face with rolling eyes', 'Pleading face', 'Smiling face with sunglasses', 'Zany face', 'Face vomiting', 'Clown face', 'Pile of poo', 'Hundred points', 'Eyes', 'Clapper board', 'Television', 'Pizza', 'Beer mug', 'Face holding back tears', 'Melting face']

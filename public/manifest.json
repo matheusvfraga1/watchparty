@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Sessão — assista junto",
-  "short_name": "Sessão",
+  "name": "Watch Party",
+  "short_name": "Watch Party",
   "description": "Assista vídeos e filmes junto com amigos, com chat ao vivo.",
   "start_url": "/?source=app",
   "scope": "/",

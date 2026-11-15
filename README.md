@@ -1,4 +1,4 @@
-# Sessão — assista junto com amigos
+# Watch Party — assista junto com amigos
 
 Salas abertas/privadas (com senha opcional), chat ao vivo, reações e vídeo sincronizado no PC e celular.
 
