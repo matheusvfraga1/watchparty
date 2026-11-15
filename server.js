@@ -17,6 +17,11 @@ app.get('/.well-known/assetlinks.json', (_, res) => res.json([{
   relation: ['delegate_permission/common.handle_all_urls'],
   target: { namespace: 'android_app', package_name: 'app.watchparty', sha256_cert_fingerprints: ['D6:4F:D9:6E:3F:82:17:91:12:8A:EA:C7:66:5C:3E:FB:A7:9F:89:FB:D9:2C:DD:69:3B:53:BA:4B:73:B6:A4:E6'] },
 }]));
+const SITE = 'https://watchparty-i5yl.onrender.com';
+const sendFile = (name, body) => (_, res) => res.attachment(name).type('application/octet-stream').send(body);
+app.get('/downloads/WatchParty.url', sendFile('Watch Party.url', `[InternetShortcut]\r\nURL=${SITE}/?source=app\r\nIconFile=${SITE}/favicon.ico\r\nIconIndex=0\r\n`));
+app.get('/downloads/WatchParty.webloc', sendFile('Watch Party.webloc', `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>URL</key><string>${SITE}/?source=app</string></dict></plist>\n`));
+app.get('/downloads/watch-party.desktop', sendFile('watch-party.desktop', `[Desktop Entry]\nType=Link\nName=Watch Party\nURL=${SITE}/?source=app\nIcon=video-display\n`));
 app.get('/downloads/WatchParty.apk', (_, res) => res.download(path.join(__dirname, 'public', 'downloads', 'WatchParty.apk'), 'WatchParty.apk', { headers: { 'Content-Type': 'application/vnd.android.package-archive' } }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/yt', async (req, res) => {

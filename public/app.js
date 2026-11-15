@@ -227,8 +227,13 @@ $$('[data-open-add]').forEach(b => b.onclick = () => {
   $('#addModal').classList.remove('hidden');
   ytFirstLoad();
 });
-$$('[data-close]').forEach(b => b.onclick = () => b.closest('.modal').classList.add('hidden'));
-$$('.modal').forEach(m => m.onclick = e => { if (e.target === m) m.classList.add('hidden'); });
+// fechar modais: botão X, clique fora ou Esc (delegado, funciona em qualquer navegador)
+document.addEventListener('click', e => {
+  const x = e.target.closest?.('[data-close]');
+  if (x) { x.closest('.modal')?.classList.add('hidden'); return; }
+  if (e.target.classList?.contains('modal')) e.target.classList.add('hidden');
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $$('.modal:not(.hidden)').forEach(m => m.classList.add('hidden')); });
 $$('.src-tabs button').forEach(b => b.onclick = () => {
   $$('.src-tabs button').forEach(x => x.classList.toggle('on', x === b));
   $$('.src-body').forEach(x => x.classList.toggle('hidden', x.dataset.body !== b.dataset.src));
@@ -752,12 +757,12 @@ const device = isIOS ? 'ios' : isAndroid ? 'android' : 'pc';
 function installHelp(msg) { $('#installMsg').textContent = msg; $('#installModal').classList.remove('hidden'); }
 function installPC() {
   if (installEvt) { installEvt.prompt(); installEvt.userChoice.then(r => { if (r.outcome === 'accepted') toast('App instalado!'); }); installEvt = null; return; }
-  const opera = /OPR\//.test(UA), firefox = /Firefox/.test(UA), edge = /Edg\//.test(UA);
-  if (device !== 'pc') return installHelp(`No computador, abra ${location.host} no Chrome ou Edge e clique em “Baixar app” → Computador.`);
-  installHelp(opera || firefox
-    ? `O ${opera ? 'Opera' : 'Firefox'} não instala apps. Abra ${location.host} no Chrome ou Edge (o Edge já vem no Windows) e clique em “Baixar app” → Computador.`
-    : edge ? 'Clique no ícone de instalar na barra de endereço, ou menu ⋯ → Apps → “Instalar Watch Party”.'
-    : 'Clique no ícone de instalar na barra de endereço, ou menu ⋮ → “Transmitir, salvar e compartilhar” → “Instalar página como app”.');
+  // navegador sem instalação de app (Opera, Firefox, Safari...): baixa um atalho com o ícone do Watch Party
+  const mac = /Macintosh|Mac OS X/.test(UA), linux = /Linux/.test(UA) && !isAndroid;
+  if (device === 'pc') location.href = '/downloads/' + (mac ? 'WatchParty.webloc' : linux ? 'watch-party.desktop' : 'WatchParty.url');
+  installHelp(device !== 'pc' ? `No computador, abra ${location.host} e clique em “Baixar app” → Computador.`
+    : mac ? 'Baixamos o atalho do Watch Party. Arraste o arquivo para a Mesa ou para o Dock e abra por ele.'
+    : 'Baixamos o atalho do Watch Party. Arraste o arquivo “WatchParty” dos Downloads para a área de trabalho e abra por ele. Para abrir numa janela própria, sem abas, instale pelo Chrome ou Edge (o Edge já vem no Windows).');
 }
 const INSTALL_OPTS = [
   { k: 'android', icon: 'smartphone', title: 'Android e Android TV', sub: 'Baixar .apk', run: () => { location.href = '/downloads/WatchParty.apk'; toast('Abra o arquivo baixado e permita instalar. Se pedir, libere “instalar apps desconhecidos”.', 7000); } },
