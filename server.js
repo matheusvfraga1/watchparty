@@ -21,8 +21,13 @@ app.get('/api/ytchannel', async (req, res) => {
   if (!/^UC[\w-]{22}$/.test(id)) return res.status(400).json({ error: 'id inválido' });
   try { res.json(await ytChannel(id)); } catch (e) { res.status(502).json({ error: e.message }); }
 });
+const feedHits = new Map();
 app.post('/api/ytfeed', express.json({ limit: '50kb' }), async (req, res) => {
-  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(x => /^UC[\w-]{22}$/.test(x)).slice(0, 200);
+  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.ip, now = Date.now();
+  const h = (feedHits.get(ip) || []).filter(t => now - t < 60e3); h.push(now); feedHits.set(ip, h);
+  if (h.length > 6) return res.status(429).json({ error: 'muitas requisições' });
+  if (feedHits.size > 5000) feedHits.clear();
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(x => /^UC[\w-]{22}$/.test(x)).slice(0, 120);
   try { res.json(await ytFeed(ids)); } catch (e) { res.status(502).json({ error: 'feed falhou' }); }
 });
 app.get('/api/drive', async (req, res) => {
@@ -35,8 +40,11 @@ app.get('/r/:id', (_, res) => res.sendFile(path.join(__dirname, 'public', 'index
 const rooms = new Map();
 const COLORS = ['#ff5c8a', '#5cc8ff', '#ffd25c', '#7dff8a', '#c38bff', '#ff9a5c', '#5cffe1', '#ff6bd6'];
 
-const newId = () => crypto.randomBytes(4).toString('hex').slice(0, 6).toUpperCase();
-const hash = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
+const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const newId = (n = 8) => [...crypto.randomBytes(n)].map(b => ALPHA[b % 32]).join('');
+const hashPw = (pw, salt = crypto.randomBytes(16).toString('hex')) => salt + ':' + crypto.scryptSync(String(pw), salt, 32).toString('hex');
+const checkPw = (pw, stored) => { const [salt, h] = stored.split(':'); const a = Buffer.from(hashPw(pw, salt).split(':')[1], 'hex'), b = Buffer.from(h, 'hex'); return a.length === b.length && crypto.timingSafeEqual(a, b); };
+const STICKER_CDN = 'https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/';
 
 function currentTime(r) {
   const p = r.playback;
@@ -53,7 +61,7 @@ function snapshot(r) {
   };
 }
 function publicList() {
-  return [...rooms.values()].filter(r => r.isPublic).map(r => ({
+  return [...rooms.values()].filter(r => r.isPublic && r.users.size > 0).map(r => ({
     id: r.id, name: r.name, users: r.users.size,
     title: r.media?.title || null, hasPassword: !!r.password,
   }));
@@ -69,7 +77,7 @@ const canControl = (r, sid) => r.everyoneControls || r.hostId === sid;
 const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, n);
 
 io.on('connection', (socket) => {
-  let room = null;
+  let room = null, fails = [];
 
   socket.on('rooms:list', (cb) => typeof cb === 'function' && cb(publicList()));
 
@@ -78,7 +86,7 @@ io.on('connection', (socket) => {
     let id; do { id = newId(); } while (rooms.has(id));
     rooms.set(id, {
       id, name: clean(d?.name, 60) || 'Sala', isPublic: !!d?.isPublic,
-      password: d?.password ? hash(d.password) : null,
+      password: d?.password ? hashPw(String(d.password).slice(0, 40)) : null,
       everyoneControls: d?.everyoneControls !== false,
       hostId: null, streamer: null, users: new Map(), messages: [],
       media: null, playback: { playing: false, time: 0, ts: Date.now(), rate: 1 },
@@ -90,9 +98,11 @@ io.on('connection', (socket) => {
 
   socket.on('room:join', (d, cb) => {
     if (typeof cb !== 'function') return;
+    const now = Date.now(); fails = fails.filter(t => now - t < 60e3);
+    if (fails.length >= 8) return cb({ error: 'Muitas tentativas. Espere um minuto.' });
     const r = rooms.get(clean(d?.id, 10).toUpperCase());
-    if (!r) return cb({ error: 'Sala não encontrada' });
-    if (r.password && hash(d?.password || '') !== r.password) return cb({ error: 'senha', needPassword: true });
+    if (!r) { fails.push(now); return cb({ error: 'Sala não encontrada' }); }
+    if (r.password && !checkPw(d?.password || '', r.password)) { if (d?.password) fails.push(now); return cb({ error: 'senha', needPassword: true }); }
     if (room) leave();
     room = r;
     socket.join(r.id);
@@ -106,11 +116,19 @@ io.on('connection', (socket) => {
     broadcastList();
   });
 
-  socket.on('chat', (text) => {
+  let lastChat = [];
+  socket.on('chat', (msg) => {
     if (!room) return;
     const u = room.users.get(socket.id); if (!u) return;
-    const t = clean(text, 500); if (!t) return;
-    const m = { id: newId() + Date.now(), uid: socket.id, name: u.name, color: u.color, text: t, at: Date.now() };
+    const now = Date.now(); lastChat = lastChat.filter(t => now - t < 5000); if (lastChat.length >= 8) return; lastChat.push(now);
+    let t = '', sticker = null;
+    if (msg && typeof msg === 'object') {
+      const s = String(msg.sticker || '');
+      if (s.startsWith(STICKER_CDN) && s.length < 300 && /^[\w\-./%:@]+$/.test(s)) sticker = s;
+      else if (/^data:image\/(webp|png|jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length < 560e3) sticker = s;
+      else return;
+    } else { t = clean(msg, 500); if (!t) return; }
+    const m = { id: newId() + now, uid: socket.id, name: u.name, color: u.color, text: t, sticker, at: now };
     room.messages.push(m); if (room.messages.length > 150) room.messages.shift();
     io.to(room.id).emit('chat', m);
   });
@@ -139,6 +157,8 @@ io.on('connection', (socket) => {
     const isHeartbeat = p?.heartbeat;
     if (isHeartbeat ? socket.id !== room.hostId : !canControl(room, socket.id)) return;
     const time = Number(p?.time); if (!isFinite(time) || time < 0) return;
+    if (isHeartbeat && Date.now() - (room.lastControl || 0) < 2000) return; // não sobrescreve ação recente de outra pessoa
+    if (!isHeartbeat) room.lastControl = Date.now();
     room.playback = { playing: !!p.playing, time, ts: Date.now(), rate: Number(p.rate) > 0 ? Math.min(Number(p.rate), 4) : 1 };
     socket.to(room.id).emit('playback', { ...room.playback, by: socket.id, heartbeat: !!isHeartbeat });
   });
@@ -165,8 +185,9 @@ io.on('connection', (socket) => {
   socket.on('rtc:want', () => {
     if (room?.streamer && room.streamer !== socket.id) io.to(room.streamer).emit('rtc:want', socket.id);
   });
-  socket.on('rtc:signal', ({ to, data } = {}) => {
-    if (!room || !room.users.has(to)) return;
+  socket.on('rtc:signal', (msg) => {
+    const { to, data } = msg || {};
+    if (!room || typeof to !== 'string' || !room.users.has(to) || !data || typeof data !== 'object') return;
     io.to(to).emit('rtc:signal', { from: socket.id, data });
   });
   socket.on('stream:end', () => {
@@ -202,6 +223,9 @@ setInterval(() => {
   for (const [id, r] of rooms) if (r.emptySince && Date.now() - r.emptySince > 10 * 60e3) { rooms.delete(id); changed = true; }
   if (changed) broadcastList();
 }, 60e3);
+
+process.on('uncaughtException', e => console.error('erro:', e));
+process.on('unhandledRejection', e => console.error('erro:', e));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log('Rodando em http://localhost:' + PORT));

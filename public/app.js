@@ -31,13 +31,18 @@ $('#joinCode').onkeydown = e => e.key === 'Enter' && $('#joinBtn').click();
 
 function renderList(list) {
   const el = $('#roomList');
-  el.innerHTML = list.length ? '' : '<p class="hint">Nenhuma sala aberta agora. Crie a sua!</p>';
+  el.innerHTML = list.length ? '' : '<div class="empty-list"><i data-lucide="popcorn"></i><p class="sm">Nenhuma sala aberta agora.<br>Crie a sua e chame a galera.</p></div>';
   list.sort((a, b) => b.users - a.users).forEach(r => {
-    const d = document.createElement('div'); d.className = 'room-item';
-    d.innerHTML = `<div class="meta"><b>${r.hasPassword ? '🔒 ' : ''}${esc(r.name)}</b><small>${r.title ? '▶ ' + esc(r.title) : 'Escolhendo...'}</small></div><span class="badge">👥 ${r.users}</span>`;
-    d.onclick = () => join(r.id); el.appendChild(d);
+    const d = document.createElement('div'); d.className = 'room-item'; d.tabIndex = 0;
+    d.innerHTML = `<div class="ava"><i data-lucide="${r.title ? 'play' : 'clapperboard'}"></i></div><div class="meta"><b>${r.hasPassword ? '<i data-lucide="lock"></i>' : ''}${esc(r.name)}</b><small>${r.title ? esc(r.title) : 'Escolhendo o que assistir'}</small></div><span class="badge"><i data-lucide="users"></i>${r.users}</span>`;
+    d.onclick = () => join(r.id); d.onkeydown = e => e.key === 'Enter' && join(r.id); el.appendChild(d);
   });
 }
+// ícones Lucide em elementos criados dinamicamente
+let iconQ = 0;
+const icons = () => { if (iconQ) return; iconQ = requestAnimationFrame(() => { iconQ = 0; try { lucide.createIcons(); } catch {} }); };
+new MutationObserver(muts => { if (muts.some(m => [...m.addedNodes].some(n => n.nodeType === 1 && (n.matches?.('[data-lucide]') || n.querySelector?.('[data-lucide]'))))) icons(); }).observe(document.body, { childList: true, subtree: true });
+icons();
 socket.on('rooms:list', renderList);
 socket.emit('rooms:list', renderList);
 
@@ -50,7 +55,12 @@ function join(id, password) {
   const nick = getNick(); if (!nick) return;
   socket.emit('room:join', { id, nick, password }, (res) => {
     if (res.needPassword) { const p = prompt(password ? 'Senha incorreta. Tente de novo:' : 'Sala com senha:'); if (p != null) join(id, p); return; }
-    if (res.error) { toast(res.error); if (location.pathname !== '/') history.replaceState(null, '', '/'); return; }
+    if (res.error) {
+      toast(res.error === 'Sala não encontrada' ? 'Essa sala foi encerrada.' : res.error);
+      if (!$('#room').classList.contains('hidden')) { stopStreaming(true); closeViewerPc(); unloadMedia(); R = null; $('#room').classList.add('hidden'); $('#home').classList.remove('hidden'); socket.emit('rooms:list', renderList); }
+      if (location.pathname !== '/') history.replaceState(null, '', '/');
+      return;
+    }
     me = res.me; R = res.state; R._pw = password;
     if (location.pathname !== '/r/' + R.id) history.pushState(null, '', '/r/' + R.id);
     $('#home').classList.add('hidden'); $('#room').classList.remove('hidden');
@@ -73,7 +83,7 @@ socket.on('connect', () => { if (R) { const id = R.id, pw = R._pw; R = null; sto
 
 function renderHeader() {
   $('#rTitle').textContent = R.name;
-  $('#rSub').textContent = `${R.isPublic ? '🌐 Aberta' : '🔒 Privada'} · código ${R.id}${isHost() ? ' · você é o anfitrião' : ''}${R.everyoneControls ? '' : ' · só o anfitrião controla'}`;
+  $('#rSub').textContent = `${R.isPublic ? 'Aberta' : 'Privada'} · código ${R.id}${isHost() ? ' · você é o anfitrião' : ''}${R.everyoneControls ? '' : ' · só o anfitrião controla'}`;
   document.title = R.name + ' · Sessão';
 }
 function renderUsers() {
@@ -81,8 +91,8 @@ function renderUsers() {
   $('#people').innerHTML = '';
   R.users.forEach(u => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="av" style="background:${u.color}">${esc(u.name[0].toUpperCase())}</span><span class="nm">${esc(u.name)}${u.id === me ? ' (você)' : ''}</span>${u.id === R.hostId ? '<small>👑 anfitrião</small>' : ''}`;
-    if (isHost() && u.id !== me) { const b = document.createElement('button'); b.className = 'small'; b.textContent = 'Tornar anfitrião'; b.onclick = () => socket.emit('host:transfer', u.id); li.appendChild(b); }
+    li.innerHTML = `<span class="av" style="background:${u.color}">${esc(u.name[0].toUpperCase())}</span><span class="nm">${esc(u.name)}${u.id === me ? ' <span class="muted">(você)</span>' : ''}</span>${u.id === R.hostId ? '<span class="badge"><i data-lucide="crown"></i>anfitrião</span>' : ''}`;
+    if (isHost() && u.id !== me) { const b = document.createElement('button'); b.className = 'btn btn-outline btn-sm'; b.textContent = 'Tornar anfitrião'; b.onclick = () => socket.emit('host:transfer', u.id); li.appendChild(b); }
     $('#people').appendChild(li);
   });
 }
@@ -112,16 +122,95 @@ function addMsg(m) {
   else {
     d.className = 'msg';
     const t = new Date(m.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    d.innerHTML = `<b style="color:${m.color}">${esc(m.name)}</b>${esc(m.text)}<time>${t}</time>`;
+    const onlyEmoji = m.text && /^(\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️|\s){1,12}$/u.test(m.text);
+    const content = m.sticker ? `<img class="stk" src="${esc(m.sticker)}" alt="figurinha" loading="lazy">` : `<div class="txt${onlyEmoji ? ' big' : ''}">${esc(m.text)}</div>`;
+    d.innerHTML = `<span class="ava" style="background:${esc(m.color)}">${esc((m.name || '?')[0].toUpperCase())}</span><div class="body"><div class="who"><b>${esc(m.name)}</b><time>${t}</time></div>${content}</div>`;
+    if (m.sticker) d.querySelector('img').onload = () => { if (atBottom || m.uid === me) box.scrollTop = box.scrollHeight; };
   }
   box.appendChild(d);
   while (box.children.length > 200) box.firstChild.remove();
   if (atBottom || m.uid === me) box.scrollTop = box.scrollHeight;
 }
 socket.on('chat', m => R && addMsg(m));
-$('#chatForm').onsubmit = e => { e.preventDefault(); const v = $('#chatIn').value.trim(); if (v) socket.emit('chat', v); $('#chatIn').value = ''; };
-$$('.tabs button').forEach(b => b.onclick = () => {
-  $$('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+$('#chatForm').onsubmit = e => { e.preventDefault(); const v = $('#chatIn').value.trim(); if (v) socket.emit('chat', v); $('#chatIn').value = ''; closePicker(); };
+
+// ---- Emojis e figurinhas ----
+const EMOJIS = {
+  'Rostos': '😂🤣😅😊😍🥰😘😎🤩🥳😏😴🥱🤔🤨😐🙄😬😮😱😳🥺😭😢😤😡🤯🤬🤡💀👻🤢🤮😈🫠🫣🫡🤫🤭',
+  'Gestos': '👍👎👏🙌🙏👀💪🤝✌️🤞👋🫶❤️🔥💯✨🎉💔💩',
+  'Sessão': '🍿🎬📺🎥🍕🍔🍟🥤🍺🍷☕🛋️🌙⚽🎮🎵',
+};
+const FLUENT = 'https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/';
+const STICKERS = ['Face with tears of joy', 'Rolling on the floor laughing', 'Smiling face with heart-eyes', 'Loudly crying face', 'Face screaming in fear', 'Exploding head', 'Skull', 'Ghost', 'Popcorn', 'Fire', 'Red heart', 'Clapping hands*', 'Thumbs up*', 'Party popper', 'Sleeping face', 'Yawning face', 'Thinking face', 'Face with rolling eyes', 'Pleading face', 'Smiling face with sunglasses', 'Zany face', 'Face vomiting', 'Clown face', 'Pile of poo', 'Hundred points', 'Eyes', 'Clapper board', 'Television', 'Pizza', 'Beer mug', 'Face holding back tears', 'Melting face']
+  .map(n => { const tone = n.endsWith('*'), name = n.replace('*', ''), f = name.toLowerCase().replace(/ /g, '_'); return FLUENT + encodeURIComponent(name) + (tone ? `/Default/3D/${f}_3d_default.png` : `/3D/${f}_3d.png`); });
+const myStickers = () => { try { return JSON.parse(store.get('stickers') || '[]'); } catch { return []; } };
+const saveStickers = (a) => { try { localStorage.setItem('stickers', JSON.stringify(a)); return true; } catch { toast('Sem espaço para mais figurinhas. Apague algumas.'); return false; } };
+let pickerTab = 'emoji';
+function closePicker() { $('#picker')?.remove(); }
+function sendSticker(src) { socket.emit('chat', { sticker: src }); closePicker(); }
+function renderPicker() {
+  let p = $('#picker');
+  if (!p) {
+    p = document.createElement('div'); p.id = 'picker'; p.className = 'picker';
+    p.innerHTML = '<div class="tabs ptabs"><button data-p="emoji"><i data-lucide="smile"></i>Emojis</button><button data-p="sticker"><i data-lucide="sticker"></i>Figurinhas</button></div><div class="picker-body"></div>';
+    p.querySelectorAll('.ptabs button').forEach(b => b.onclick = () => { pickerTab = b.dataset.p; renderPicker(); });
+    $('#chatPane').appendChild(p);
+  }
+  p.querySelectorAll('.ptabs button').forEach(b => b.classList.toggle('on', b.dataset.p === pickerTab));
+  const body = p.querySelector('.picker-body'); body.innerHTML = '';
+  if (pickerTab === 'emoji') {
+    for (const [cat, list] of Object.entries(EMOJIS)) {
+      body.insertAdjacentHTML('beforeend', `<h4>${cat}</h4>`);
+      const g = document.createElement('div'); g.className = 'emoji-grid';
+      for (const e of list.match(/\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic})*/gu)) {
+        const b = document.createElement('button'); b.textContent = e; b.type = 'button';
+        b.onclick = () => { const i = $('#chatIn'); const s = i.selectionStart ?? i.value.length; i.value = i.value.slice(0, s) + e + i.value.slice(i.selectionEnd ?? s); i.focus(); i.selectionStart = i.selectionEnd = s + e.length; };
+        g.appendChild(b);
+      }
+      body.appendChild(g);
+    }
+  } else {
+    body.insertAdjacentHTML('beforeend', '<h4>Minhas figurinhas</h4>');
+    const mine = document.createElement('div'); mine.className = 'sticker-grid';
+    const add = document.createElement('label'); add.className = 'add'; add.tabIndex = 0;
+    add.innerHTML = '<i data-lucide="image-plus"></i>Criar<input type="file" accept="image/*" hidden>';
+    add.querySelector('input').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) makeSticker(f); };
+    add.onkeydown = e => e.key === 'Enter' && add.querySelector('input').click();
+    mine.appendChild(add);
+    myStickers().forEach((src, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<img src="${esc(src)}" alt=""><span class="del" title="Apagar">✕</span>`;
+      b.onclick = e => { if (e.target.classList.contains('del')) { const a = myStickers(); a.splice(i, 1); saveStickers(a); return renderPicker(); } sendSticker(src); };
+      mine.appendChild(b);
+    });
+    body.appendChild(mine);
+    body.insertAdjacentHTML('beforeend', '<h4>Prontas</h4>');
+    const g = document.createElement('div'); g.className = 'sticker-grid';
+    STICKERS.forEach(src => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<img loading="lazy" src="${src}" alt="">`; b.onclick = () => sendSticker(src); g.appendChild(b); });
+    body.appendChild(g);
+  }
+}
+// cria figurinha: recorta quadrado, 256px, WebP (GIF pequeno vai como está, animado)
+function makeSticker(file) {
+  const done = (src) => { const a = myStickers(); a.unshift(src); if (saveStickers(a.slice(0, 40))) { renderPicker(); toast('Figurinha criada! Toque nela para enviar.'); } };
+  if (file.type === 'image/gif' && file.size < 400e3) { const r = new FileReader(); r.onload = () => done(r.result); r.readAsDataURL(file); return; }
+  const img = new Image(), url = URL.createObjectURL(file);
+  img.onload = () => {
+    const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+    const k = Math.min(img.width, img.height), sx = (img.width - k) / 2, sy = (img.height - k) / 2;
+    c.getContext('2d').drawImage(img, sx, sy, k, k, 0, 0, S, S);
+    URL.revokeObjectURL(url);
+    let src = c.toDataURL('image/webp', 0.82); if (!src.startsWith('data:image/webp')) src = c.toDataURL('image/png');
+    if (src.length > 180e3) src = c.toDataURL('image/jpeg', 0.7);
+    done(src);
+  };
+  img.onerror = () => toast('Não consegui ler essa imagem');
+  img.src = url;
+}
+$('#pickBtn').onclick = (e) => { e.preventDefault(); $('#picker') ? closePicker() : renderPicker(); };
+document.addEventListener('click', e => { if ($('#picker') && e.target.isConnected && !e.target.closest('#picker,#pickBtn')) closePicker(); });
+
+$$('.side > .tabs button').forEach(b => b.onclick = () => {
+  $$('.side > .tabs button').forEach(x => x.classList.toggle('on', x === b));
   $('#chatPane').classList.toggle('hidden', b.dataset.tab !== 'chat');
   $('#peoplePane').classList.toggle('hidden', b.dataset.tab !== 'people');
 });
@@ -156,11 +245,11 @@ const api = (u) => fetch(u).then(r => r.ok ? r.json() : Promise.reject(new Error
 
 // YouTube: busca, canais, categorias e conta Google
 const CHIPS = [
-  ['🎬 Filmes completos', 'filme completo dublado', 'long'], ['🍿 Lançamentos', 'filme lançamento 2026 completo dublado', 'long'],
-  ['😂 Comédia', 'filme de comédia completo dublado', 'long'], ['💥 Ação', 'filme de ação completo dublado', 'long'],
-  ['👻 Terror', 'filme de terror completo dublado', 'long'], ['🧸 Desenhos', 'desenho animado completo dublado', 'long'],
-  ['🎞️ Trailers', 'trailer oficial dublado 2026', 'video'], ['🎵 Música', 'clipes mais tocados brasil', 'video'],
-  ['⚽ Futebol', 'melhores momentos futebol', 'video'], ['🔴 Ao vivo', 'ao vivo agora', 'live'],
+  ['Filmes completos', 'filme completo dublado', 'long'], ['Lançamentos', 'filme lançamento 2026 completo dublado', 'long'],
+  ['Comédia', 'filme de comédia completo dublado', 'long'], ['Ação', 'filme de ação completo dublado', 'long'],
+  ['Terror', 'filme de terror completo dublado', 'long'], ['Desenhos', 'desenho animado completo dublado', 'long'],
+  ['Trailers', 'trailer oficial dublado 2026', 'video'], ['Música', 'clipes mais tocados brasil', 'video'],
+  ['Futebol', 'melhores momentos futebol', 'video'], ['Ao vivo', 'ao vivo agora', 'live'],
 ];
 let ytLast = null;
 const ytBox = () => $('#ytResults');
@@ -188,7 +277,7 @@ function renderVideos(items, header) {
       d.onclick = () => openChannel(v.id, v.title);
     } else if (v.type === 'playlist') {
       d.className = 'vcard';
-      d.innerHTML = `<div class="th"><img loading="lazy" src="${esc(v.thumb)}" alt=""><span class="dur">☰ ${v.count ?? ''}</span></div><div class="info"><b>${esc(v.title)}</b><small>Playlist</small></div>`;
+      d.innerHTML = `<div class="th"><img loading="lazy" src="${esc(v.thumb)}" alt=""><span class="dur">${v.count ?? ''} vídeos</span></div><div class="info"><b>${esc(v.title)}</b><small>Playlist</small></div>`;
       d.onclick = () => openPlaylist(v.id, v.title);
     } else {
       d.className = 'vcard';
@@ -201,7 +290,7 @@ function renderVideos(items, header) {
 }
 const backHeader = (title, back) => {
   const h = document.createElement('div'); h.className = 'gridhead';
-  h.innerHTML = `<button class="small">← Voltar</button><b>${esc(title)}</b>`;
+  h.innerHTML = `<button class="btn btn-outline btn-sm"><i data-lucide="arrow-left"></i>Voltar</button><b>${esc(title)}</b>`;
   h.querySelector('button').onclick = back; return h;
 };
 let lastList = null;
@@ -276,16 +365,16 @@ async function openPlaylist(id, title) {
     renderVideos(d.items.filter(i => i.snippet.resourceId?.videoId && thumbOf(i.snippet)).map(i => ({ id: i.snippet.resourceId.videoId, title: i.snippet.title, channel: i.snippet.videoOwnerChannelTitle, channelId: i.snippet.videoOwnerChannelId, thumb: thumbOf(i.snippet) })), backHeader(title, () => back && back()));
   } catch { if (ytLast === key) ytBox().innerHTML = '<div class="loading">Não consegui abrir a playlist.</div>'; }
 }
-const ME_CHIPS = [['subs', '📺 Inscrições'], ['channels', '👤 Meus canais'], ['liked', '👍 Curtidos'], ['playlists', '📂 Playlists']];
+const ME_CHIPS = [['subs', 'Inscrições', 'rss'], ['channels', 'Meus canais', 'user'], ['liked', 'Curtidos', 'thumbs-up'], ['playlists', 'Playlists', 'list-video']];
 function renderAcct() {
   const box = $('#ytAcct');
   $$('#ytChips [data-me]').forEach(b => b.remove());
   if (!gClientId) { box.innerHTML = ''; return; }
   if (gToken()) {
-    box.innerHTML = '<span>✅ Conectado ao YouTube</span><button class="small" id="gOut">Sair</button>';
+    box.innerHTML = '<span class="badge"><i data-lucide="check"></i>Conectado ao YouTube</span><button class="btn btn-ghost btn-sm" id="gOut">Sair</button>';
     $('#gOut').onclick = () => { try { google.accounts.oauth2.revoke(gToken()); sessionStorage.removeItem('gtok'); } catch {} subsCache = null; renderAcct(); ytLast = null; ytFirstLoad(); };
-    [...ME_CHIPS].reverse().forEach(([k, label]) => {
-      const b = document.createElement('button'); b.dataset.me = k; b.textContent = label; b.className = 'me';
+    [...ME_CHIPS].reverse().forEach(([k, label, ic]) => {
+      const b = document.createElement('button'); b.dataset.me = k; b.innerHTML = `<i data-lucide="${ic}"></i>${label}`; b.className = 'me';
       b.onclick = () => { setChip(b); $('#ytQ').value = ''; ytTask('me' + k, loaders[k]).then(() => { lastList = () => b.click(); }); };
       $('#ytChips').prepend(b);
     });
@@ -313,17 +402,29 @@ fetch('/api/config').then(r => r.json()).then(c => {
 }).catch(() => {});
 
 // Streaming: atalhos
+const SI = (n) => `https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/${n}.svg`;
+const FAV = (d) => `https://www.google.com/s2/favicons?domain=${d}&sz=128`;
 const SERVICES = [
-  ['Netflix', 'https://www.netflix.com/browse', '#e50914'], ['Prime Video', 'https://www.primevideo.com', '#00a8e1'],
-  ['Disney+', 'https://www.disneyplus.com', '#113ccf'], ['Max', 'https://play.max.com', '#002be7'],
-  ['Globoplay', 'https://globoplay.globo.com', '#fb0234'], ['Apple TV+', 'https://tv.apple.com', '#333'],
-  ['Paramount+', 'https://www.paramountplus.com/br/', '#0064ff'], ['Crunchyroll', 'https://www.crunchyroll.com', '#f47521'],
-  ['Pluto TV', 'https://pluto.tv/br', '#2d2d2d'], ['Twitch', 'https://www.twitch.tv', '#9146ff'],
-  ['Mercado Play', 'https://play.mercadolivre.com.br', '#2d3277'], ['Kick', 'https://kick.com', '#2a2a2a'],
+  ['Netflix', 'https://www.netflix.com/browse', '#000', SI('netflix'), '#e50914'],
+  ['Prime Video', 'https://www.primevideo.com', '#0f171e', SI('primevideo'), '#fff'],
+  ['Disney+', 'https://www.disneyplus.com', '#0e1846', FAV('disneyplus.com')],
+  ['Max', 'https://play.max.com', '#002be7', SI('max'), '#fff'],
+  ['Globoplay', 'https://globoplay.globo.com', '#fb0234', FAV('globoplay.globo.com')],
+  ['Apple TV+', 'https://tv.apple.com', '#000', SI('appletv'), '#fff'],
+  ['Paramount+', 'https://www.paramountplus.com/br/', '#0064ff', SI('paramountplus'), '#fff'],
+  ['Crunchyroll', 'https://www.crunchyroll.com', '#f47521', SI('crunchyroll'), '#fff'],
+  ['Pluto TV', 'https://pluto.tv/br', '#111', FAV('pluto.tv')],
+  ['Twitch', 'https://www.twitch.tv', '#9146ff', SI('twitch'), '#fff'],
+  ['Mercado Play', 'https://play.mercadolivre.com.br', '#ffe600', FAV('mercadolivre.com.br'), null, '#2d3277'],
+  ['Kick', 'https://kick.com', '#0b0e0f', SI('kick'), '#53fc18'],
 ];
-SERVICES.forEach(([n, u, c]) => {
-  const b = document.createElement('button'); b.className = 'svc'; b.style.background = c; b.textContent = n;
-  b.onclick = () => { window.open(u, '_blank', 'noopener'); toast('Coloque o filme na outra aba e volte aqui para compartilhar', 4000); };
+SERVICES.forEach(([n, u, bg, logo, tint, fg]) => {
+  const b = document.createElement('button'); b.className = 'svc'; b.style.background = bg; if (fg) b.style.color = fg;
+  const img = tint
+    ? `<span class="si" style="background:${tint};-webkit-mask:url(${logo}) center/contain no-repeat;mask:url(${logo}) center/contain no-repeat"></span>`
+    : `<img class="fav" src="${logo}" alt="">`;
+  b.innerHTML = `${img}<span>${n}</span>`;
+  b.onclick = () => { window.open(u, '_blank'); toast('Entre na sua conta, dê play e volte aqui para transmitir a aba', 5000); };
   $('#services').appendChild(b);
 });
 
@@ -333,7 +434,7 @@ let driveStack = [];
 function renderSaved() {
   const box = $('#driveSaved'); box.innerHTML = '';
   savedFolders().forEach(f => {
-    const b = document.createElement('button'); b.innerHTML = `📁 ${esc(f.title)}<span class="x" title="Remover">✕</span>`;
+    const b = document.createElement('button'); b.innerHTML = `<i data-lucide="folder"></i>${esc(f.title)}<span class="x" title="Remover">✕</span>`;
     b.onclick = e => {
       if (e.target.classList.contains('x')) { store.set('driveFolders', JSON.stringify(savedFolders().filter(x => x.id !== f.id))); return renderSaved(); }
       driveStack = []; openFolder(f.id);
@@ -356,7 +457,7 @@ function openFolder(id, title) {
     items.sort((a, b) => b.folder - a.folder || a.name.localeCompare(b.name, 'pt', { numeric: true }));
     items.forEach(it => {
       const d = document.createElement('div'); d.className = 'it';
-      d.innerHTML = `${it.folder ? '📁' : /\.(mp4|webm|mkv|mov|m4v|avi)$/i.test(it.name) ? '🎬' : '📄'}<span>${esc(it.name)}</span>${it.folder ? '›' : '▶'}`;
+      d.innerHTML = `<i data-lucide="${it.folder ? 'folder' : /\.(mp4|webm|mkv|mov|m4v|avi)$/i.test(it.name) ? 'film' : 'file'}"></i><span>${esc(it.name)}</span><i data-lucide="${it.folder ? 'chevron-right' : 'play'}"></i>`;
       d.onclick = () => it.folder ? openFolder(it.id, it.name) : playDrive(it.id, it.name.replace(/\.[^.]+$/, ''));
       box.appendChild(d);
     });
@@ -389,7 +490,7 @@ let mode = null;          // 'youtube' | 'video' | 'stream' | null
 let yt = null, ytReady = false, hls = null;
 let suppressUntil = 0;
 const suppressed = () => Date.now() < suppressUntil;
-const suppress = (ms = 900) => { suppressUntil = Date.now() + ms; };
+const suppress = (ms = 1600) => { suppressUntil = Date.now() + ms; };
 
 function loadYTApi() {
   if (window.YT?.Player) return Promise.resolve();
@@ -415,7 +516,7 @@ function loadMedia(media, pb, recvAt) {
   unloadMedia();
   if (!media) return;
   $('#empty').classList.add('hidden');
-  $('#nowTitle').textContent = '▶ ' + media.title;
+  $('#nowTitle').innerHTML = '<span class="dot-live"></span>' + esc(media.title);
   mode = media.type;
   if (mode === 'youtube') {
     $('#ytBox').classList.remove('hidden');
@@ -425,11 +526,12 @@ function loadMedia(media, pb, recvAt) {
         videoId: media.src, width: '100%', height: '100%',
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1, autoplay: 0 },
         events: {
-          onReady: () => { ytReady = true; const d = yt.getVideoData?.(); if (d?.title) $('#nowTitle').textContent = '▶ ' + d.title; resync(); },
+          onReady: () => { ytReady = true; const d = yt.getVideoData?.(); if (d?.title) $('#nowTitle').innerHTML = '<span class="dot-live"></span>' + esc(d.title); resync(); },
           onStateChange: (e) => {
             if (e.data === 1) $('#tapSync').classList.add('hidden');
-            if (suppressed()) return;
-            if (e.data === 1 || e.data === 2) sendPlayback();
+            if (e.data !== 1 && e.data !== 2) return;
+            if (isEcho(e.data === 1)) return;
+            sendPlayback();
           },
         },
       });
@@ -443,7 +545,7 @@ function loadMedia(media, pb, recvAt) {
   } else if (mode === 'stream') {
     vid.classList.remove('hidden');
     if (media.by === me) { /* host já está com o vídeo local */ if (localStreamVideo) { if (vid.src !== localStreamVideo) { vid.srcObject = null; vid.src = localStreamVideo; } vid.controls = true; } else if (localStream) { vid.srcObject = localStream; vid.muted = true; vid.controls = false; vid.play().catch(() => {}); } }
-    else { vid.controls = false; requestStream(); }
+    else { vid.controls = true; requestStream(); }
   }
 }
 socket.on('media', ({ media, streamer, playback }) => { if (!R) return; R.media = media; R.streamer = streamer; loadMedia(media, playback, Date.now()); });
@@ -455,13 +557,17 @@ function getRate() { return mode === 'youtube' ? (ytReady ? yt.getPlaybackRate()
 
 function sendPlayback(heartbeat = false) {
   if (!R || !R.media || mode === 'stream') return;
-  if (!heartbeat && !canControl()) { resync(); return toast('Só o anfitrião controla o vídeo'); }
+  if (!heartbeat && !canControl()) { resync(); if (Date.now() - (sendPlayback.warned || 0) > 15000) { sendPlayback.warned = Date.now(); toast('Só o anfitrião controla o vídeo'); } return; }
   socket.emit('playback', { playing: isPlaying(), time: getTime(), rate: getRate(), heartbeat });
 }
 
+let appliedPlaying = null;
+// ignora só o eco das nossas próprias correções; ação real do usuário (estado diferente) passa
+const isEcho = (playing) => suppressed() && (playing === undefined || playing === appliedPlaying);
 function applyPlayback(pb, recvAt, force = false) {
   if (!pb || !mode || mode === 'stream') return;
   if (mode === 'youtube' && !ytReady) return;
+  appliedPlaying = !!pb.playing;
   const target = pb.time + (pb.playing ? (Date.now() - recvAt) / 1000 * (pb.rate || 1) : 0);
   const diff = Math.abs(getTime() - target);
   if (diff > (force ? 0.4 : 1.2)) { suppress(); mode === 'youtube' ? yt.seekTo(target, true) : (vid.currentTime = target); }
@@ -485,7 +591,8 @@ socket.on('playback', pb => { if (!R) return; applyPlayback(pb, Date.now(), !pb.
 // eventos do <video>
 ['play', 'pause', 'seeked', 'ratechange'].forEach(ev => vid.addEventListener(ev, () => {
   if (ev === 'play') $('#tapSync').classList.add('hidden');
-  if (mode !== 'video' || suppressed()) return;
+  if (mode !== 'video') return;
+  if (isEcho(ev === 'play' ? true : ev === 'pause' ? false : undefined)) return;
   sendPlayback();
 }));
 
@@ -530,7 +637,7 @@ function closeViewerPc() { if (viewerPc) { viewerPc.close(); viewerPc = null; } 
 socket.on('rtc:signal', async ({ from, data }) => {
   if (localStream && hostPcs.has(from)) { // sou o host
     const pc = hostPcs.get(from);
-    if (data.sdp) await pc.setRemoteDescription(data.sdp);
+    if (data.sdp) await pc.setRemoteDescription(data.sdp).catch(() => {});
     else if (data.candidate) await pc.addIceCandidate(data.candidate).catch(() => {});
     return;
   }
@@ -543,10 +650,13 @@ socket.on('rtc:signal', async ({ from, data }) => {
       vid.srcObject = e.streams[0]; vid.muted = false;
       vid.play().catch(() => { showTap(); });
     };
-    pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed') toast('Falha na conexão do streaming. Tentando de novo...'), setTimeout(requestStream, 1500); };
-    await pc.setRemoteDescription(data.sdp);
-    const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
-    socket.emit('rtc:signal', { to: from, data: { sdp: pc.localDescription } });
+    pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' && pc === viewerPc) { toast('Falha na conexão da transmissão. Tentando de novo...'); setTimeout(() => { if (pc === viewerPc && mode === 'stream' && R?.streamer === from) requestStream(); }, 1500); } };
+    try {
+      await pc.setRemoteDescription(data.sdp); if (pc !== viewerPc) return;
+      const ans = await pc.createAnswer(); if (pc !== viewerPc) return;
+      await pc.setLocalDescription(ans); if (pc !== viewerPc) return;
+      socket.emit('rtc:signal', { to: from, data: { sdp: pc.localDescription } });
+    } catch (e) { console.warn(e); }
   } else if (data.candidate && viewerPc) await viewerPc.addIceCandidate(data.candidate).catch(() => {});
 });
 
@@ -588,6 +698,18 @@ function stopStreaming(silent) {
   if (localStreamVideo) { vid.pause(); URL.revokeObjectURL(localStreamVideo); localStreamVideo = null; vid.removeAttribute('src'); vid.load(); }
   if (had && !silent) socket.emit('stream:end');
 }
+
+// ---------- APP INSTALÁVEL ----------
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+let installEvt = null;
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+if (!standalone) $('#installBtn').classList.remove('hidden');
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
+window.addEventListener('appinstalled', () => { $('#installBtn').classList.add('hidden'); toast('App instalado!'); });
+$('#installBtn').onclick = async () => {
+  if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice; if (r.outcome === 'accepted') $('#installBtn').classList.add('hidden'); installEvt = null; }
+  else $('#installModal').classList.remove('hidden');
+};
 
 // ---------- BOOT ----------
 const m = location.pathname.match(/^\/r\/([\w-]+)/);

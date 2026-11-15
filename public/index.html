@@ -1,37 +1,58 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cut">
-<meta name="theme-color" content="#0d0d14">
+<meta name="theme-color" content="#09090b">
+<meta name="description" content="Assista vídeos e filmes junto com amigos, com chat ao vivo.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Sessão</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
 <!-- HOME -->
 <section id="home" class="view">
-  <header class="brand"><img src="/icon.svg" alt=""><h1>Sessão</h1><span>assista junto, ao vivo</span></header>
+  <nav class="nav">
+    <div class="logo"><img src="/icon.svg" alt=""><span>Sessão</span></div>
+    <button id="installBtn" class="btn btn-outline btn-sm hidden"><i data-lucide="download"></i>Instalar app</button>
+  </nav>
+
+  <div class="hero">
+    <span class="pill"><span class="dot-live"></span>Ao vivo com seus amigos</span>
+    <h1>Assista junto,<br>de qualquer lugar.</h1>
+    <p class="muted">YouTube, Netflix, Google Drive ou um arquivo do seu PC. Tudo sincronizado, com chat ao vivo.</p>
+  </div>
+
   <div class="home-grid">
     <div class="card">
-      <label>Seu apelido<input id="nick" maxlength="24" placeholder="Ex.: Matheus"></label>
-      <h2>Criar sala</h2>
-      <label>Nome da sala<input id="roomName" maxlength="60" placeholder="Sessão de filme"></label>
-      <div class="seg" id="visSeg">
-        <button data-v="public" class="on">🌐 Aberta</button>
-        <button data-v="private">🔒 Privada</button>
+      <div class="card-head"><h2>Criar sala</h2><p class="muted sm">Escolha um nome e convide quem quiser.</p></div>
+      <div class="field"><label for="nick">Seu apelido</label><input id="nick" class="input" maxlength="24" placeholder="Ex.: Matheus"></div>
+      <div class="field"><label for="roomName">Nome da sala</label><input id="roomName" class="input" maxlength="60" placeholder="Sessão de filme"></div>
+      <div class="field">
+        <label>Visibilidade</label>
+        <div class="seg" id="visSeg">
+          <button data-v="public" class="on"><i data-lucide="globe"></i>Aberta</button>
+          <button data-v="private"><i data-lucide="lock"></i>Privada</button>
+        </div>
+        <p class="muted xs" id="visHint">Aparece na lista para qualquer pessoa entrar.</p>
       </div>
-      <p class="hint" id="visHint">Aparece na lista para qualquer pessoa entrar.</p>
-      <label>Senha (opcional)<input id="roomPass" type="password" maxlength="40" placeholder="Sem senha"></label>
-      <label class="check"><input type="checkbox" id="everyone" checked> Todos podem controlar o vídeo</label>
-      <button class="primary" id="createBtn">Criar sala</button>
-      <div class="or">ou</div>
-      <div class="row"><input id="joinCode" maxlength="10" placeholder="Código da sala"><button id="joinBtn">Entrar</button></div>
+      <div class="field"><label for="roomPass">Senha <span class="muted">(opcional)</span></label><input id="roomPass" class="input" type="password" maxlength="40" placeholder="Sem senha"></div>
+      <label class="switch"><input type="checkbox" id="everyone" checked><span class="track"></span>Todos podem controlar o vídeo</label>
+      <button class="btn btn-primary btn-block" id="createBtn">Criar sala<i data-lucide="arrow-right"></i></button>
+      <div class="sep"><span>ou entre com um código</span></div>
+      <div class="row"><input id="joinCode" class="input mono" maxlength="10" placeholder="EX: 4F2A9C"><button class="btn btn-outline" id="joinBtn">Entrar</button></div>
     </div>
+
     <div class="card">
-      <h2>Salas abertas <span class="live-dot"></span></h2>
+      <div class="card-head row-between"><div><h2>Salas abertas</h2><p class="muted sm">Entre e assista junto.</p></div><span class="badge"><span class="dot-live"></span>ao vivo</span></div>
       <div id="roomList" class="room-list"></div>
     </div>
   </div>
@@ -40,36 +61,37 @@
 <!-- ROOM -->
 <section id="room" class="view hidden">
   <header class="topbar">
-    <button class="icon" id="leaveBtn" title="Sair">←</button>
+    <button class="btn btn-ghost btn-icon" id="leaveBtn" title="Sair" aria-label="Sair"><i data-lucide="arrow-left"></i></button>
     <div class="title"><b id="rTitle"></b><small id="rSub"></small></div>
-    <button id="inviteBtn">🔗 Convidar</button>
-    <button class="icon" id="settingsBtn" title="Configurações">⚙</button>
+    <button class="btn btn-outline btn-sm" id="inviteBtn"><i data-lucide="user-plus"></i><span>Convidar</span></button>
+    <button class="btn btn-ghost btn-icon" id="settingsBtn" title="Configurações" aria-label="Configurações"><i data-lucide="settings-2"></i></button>
   </header>
   <main class="room-main">
     <div class="stage-wrap">
       <div id="stage" class="stage">
         <div id="empty" class="empty">
-          <p>Nada tocando ainda.</p>
-          <button class="primary" data-open-add>+ Escolher o que assistir</button>
+          <div class="empty-icon"><i data-lucide="clapperboard"></i></div>
+          <p><b>Nada tocando ainda</b><br><span class="muted sm">Escolha um vídeo, filme ou transmita sua tela.</span></p>
+          <button class="btn btn-primary" data-open-add><i data-lucide="plus"></i>Escolher o que assistir</button>
         </div>
         <div id="ytBox" class="layer hidden"><div id="yt"></div></div>
         <video id="vid" class="layer hidden" playsinline controls></video>
-        <div id="tapSync" class="tap hidden">▶ Toque para entrar na sessão</div>
+        <button id="tapSync" class="tap hidden"><i data-lucide="play"></i>Toque para entrar na sessão</button>
         <div id="floaters"></div>
       </div>
       <div class="stagebar">
         <span id="nowTitle" class="now"></span>
         <div class="reacts">
-          <button data-r="😂">😂</button><button data-r="😱">😱</button><button data-r="❤️">❤️</button><button data-r="🔥">🔥</button><button data-r="👏">👏</button>
+          <button data-r="😂" aria-label="Rir">😂</button><button data-r="😱" aria-label="Susto">😱</button><button data-r="❤️" aria-label="Amei">❤️</button><button data-r="🔥" aria-label="Fogo">🔥</button><button data-r="👏" aria-label="Palmas">👏</button>
         </div>
-        <button class="primary small" data-open-add>+ Vídeo</button>
+        <button class="btn btn-primary btn-sm" data-open-add><i data-lucide="plus"></i><span>Vídeo</span></button>
       </div>
     </div>
     <aside class="side">
-      <div class="tabs"><button class="on" data-tab="chat">Chat</button><button data-tab="people">Pessoas <span id="pCount"></span></button></div>
+      <div class="tabs"><button class="on" data-tab="chat"><i data-lucide="message-circle"></i>Chat</button><button data-tab="people"><i data-lucide="users"></i>Pessoas <span id="pCount" class="count"></span></button></div>
       <div id="chatPane" class="pane">
         <div id="msgs" class="msgs"></div>
-        <form id="chatForm" class="chatform"><input id="chatIn" maxlength="500" autocomplete="off" placeholder="Mensagem..."><button class="primary">➤</button></form>
+        <form id="chatForm" class="chatform"><button type="button" class="btn btn-ghost btn-icon" id="pickBtn" aria-label="Emojis e figurinhas"><i data-lucide="smile-plus"></i></button><input id="chatIn" class="input" maxlength="500" autocomplete="off" placeholder="Mensagem..."><button class="btn btn-primary btn-icon" aria-label="Enviar"><i data-lucide="send-horizontal"></i></button></form>
       </div>
       <div id="peoplePane" class="pane hidden"><ul id="people" class="people"></ul></div>
     </aside>
@@ -78,64 +100,80 @@
 
 <!-- EXPLORAR -->
 <div id="addModal" class="modal hidden">
-  <div class="sheet browse">
-    <div class="sheet-head"><b>Explorar</b><button class="icon" data-close>✕</button></div>
-    <div class="src-tabs">
-      <button class="on" data-src="youtube">▶ YouTube</button>
-      <button data-src="screen">🍿 Streaming</button>
-      <button data-src="drive">📁 Google Drive</button>
-      <button data-src="file">💻 Meu PC</button>
-      <button data-src="link">🔗 Link</button>
+  <div class="sheet browse" role="dialog" aria-label="Explorar">
+    <div class="sheet-head"><div><h3>Explorar</h3><p class="muted sm">Escolha o que todo mundo vai assistir.</p></div><button class="btn btn-ghost btn-icon" data-close aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <div class="src-tabs" role="tablist">
+      <button class="on" data-src="youtube"><i data-lucide="youtube"></i>YouTube</button>
+      <button data-src="screen"><i data-lucide="tv"></i>Streaming</button>
+      <button data-src="drive"><i data-lucide="hard-drive"></i>Google Drive</button>
+      <button data-src="file"><i data-lucide="monitor"></i>Meu PC</button>
+      <button data-src="link"><i data-lucide="link"></i>Link</button>
     </div>
 
     <div class="src-body" data-body="youtube">
-      <form id="ytForm" class="row"><input id="ytQ" placeholder="Buscar no YouTube ou colar link" autocomplete="off"><button class="primary">Buscar</button></form>
+      <form id="ytForm" class="search"><i data-lucide="search"></i><input id="ytQ" class="input" placeholder="Buscar no YouTube ou colar link" autocomplete="off"><button class="btn btn-primary btn-sm">Buscar</button></form>
       <div id="ytAcct" class="acct"></div>
       <div class="chips" id="ytChips"></div>
       <div id="ytResults" class="grid"></div>
     </div>
 
     <div class="src-body hidden" data-body="screen">
-      <p class="hint">Escolha o serviço: ele abre em outra aba. Coloque o filme lá e volte aqui para compartilhar a aba (marque <b>“Compartilhar áudio da aba”</b>). Só no PC.</p>
+      <div class="steps">
+        <div><span>1</span><p>Abra o serviço e entre na <b>sua</b> conta</p></div>
+        <div><span>2</span><p>Dê play no filme na outra aba</p></div>
+        <div><span>3</span><p>Volte e clique em <b>Transmitir aba</b> (marque “Compartilhar áudio”)</p></div>
+      </div>
+      <p class="muted sm">Só quem transmite precisa ter a assinatura. Os convidados assistem pela transmissão, no PC, celular ou TV. Transmitir funciona no PC (Chrome ou Edge).</p>
       <div id="services" class="services"></div>
-      <button class="primary" id="screenGo">📺 Compartilhar aba agora</button>
-      <p class="hint">Tela preta? No Chrome: Configurações → Sistema → desligue <b>“Usar aceleração gráfica”</b> e reinicie.</p>
+      <button class="btn btn-primary btn-block" id="screenGo"><i data-lucide="cast"></i>Transmitir aba</button>
+      <details class="help"><summary>Ficou com tela preta?</summary><p class="muted sm">No Chrome/Edge: Configurações → Sistema → desligue <b>“Usar aceleração gráfica”</b> e reinicie o navegador.</p></details>
     </div>
 
     <div class="src-body hidden" data-body="drive">
-      <form id="driveForm" class="row"><input id="driveUrl" placeholder="Link de uma pasta ou arquivo do Drive" autocomplete="off"><button class="primary">Abrir</button></form>
-      <p class="hint">Pasta/arquivo como “Qualquer pessoa com o link”. Suas pastas ficam salvas aqui.</p>
+      <form id="driveForm" class="search"><i data-lucide="folder-open"></i><input id="driveUrl" class="input" placeholder="Link de uma pasta ou arquivo do Drive" autocomplete="off"><button class="btn btn-primary btn-sm">Abrir</button></form>
+      <p class="muted sm">Compartilhe como “Qualquer pessoa com o link”. As pastas ficam salvas aqui.</p>
       <div class="chips" id="driveSaved"></div>
       <div id="drivePath" class="crumbs"></div>
       <div id="driveList" class="list"></div>
     </div>
 
     <div class="src-body hidden" data-body="file">
-      <p class="hint">O vídeo sai do seu PC e é transmitido ao vivo para todos (ninguém precisa ter o arquivo). Chrome/Edge/Firefox no PC.</p>
-      <label class="filebtn primary">Escolher arquivo do PC<input id="fileIn" type="file" accept="video/*,audio/*,.mkv" hidden></label>
+      <label class="dropzone"><i data-lucide="upload"></i><b>Escolher arquivo do PC</b><span class="muted sm">O vídeo é transmitido ao vivo para todos. Ninguém precisa ter o arquivo.</span><input id="fileIn" type="file" accept="video/*,audio/*,.mkv" hidden></label>
     </div>
 
     <div class="src-body hidden" data-body="link">
-      <input id="linkUrl" placeholder="YouTube, Drive ou link direto .mp4 / .m3u8">
-      <button class="primary" id="linkGo">Assistir</button>
+      <div class="search"><i data-lucide="link"></i><input id="linkUrl" class="input" placeholder="YouTube, Drive ou link direto .mp4 / .m3u8"><button class="btn btn-primary btn-sm" id="linkGo">Assistir</button></div>
     </div>
   </div>
 </div>
 
-<!-- SETTINGS MODAL -->
+<!-- SETTINGS -->
 <div id="setModal" class="modal hidden">
-  <div class="sheet">
-    <div class="sheet-head"><b>Sala</b><button class="icon" data-close>✕</button></div>
-    <p class="hint" id="setHint"></p>
-    <label class="check"><input type="checkbox" id="setPublic"> Sala aberta (aparece na lista)</label>
-    <label class="check"><input type="checkbox" id="setEveryone"> Todos podem controlar o vídeo</label>
+  <div class="sheet small" role="dialog" aria-label="Configurações da sala">
+    <div class="sheet-head"><div><h3>Configurações da sala</h3><p class="muted sm" id="setHint"></p></div><button class="btn btn-ghost btn-icon" data-close aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <label class="switch"><input type="checkbox" id="setPublic"><span class="track"></span>Sala aberta (aparece na lista)</label>
+    <label class="switch"><input type="checkbox" id="setEveryone"><span class="track"></span>Todos podem controlar o vídeo</label>
   </div>
 </div>
 
-<div id="toast" class="toast hidden"></div>
+<!-- INSTALL HELP -->
+<div id="installModal" class="modal hidden">
+  <div class="sheet small" role="dialog" aria-label="Instalar app">
+    <div class="sheet-head"><div><h3>Instalar o app</h3><p class="muted sm">Fica com ícone, abre em tela cheia e sem barra do navegador.</p></div><button class="btn btn-ghost btn-icon" data-close aria-label="Fechar"><i data-lucide="x"></i></button></div>
+    <div class="install-list">
+      <div><i data-lucide="smartphone"></i><div><b>iPhone</b><p class="muted sm">No Safari: botão Compartilhar → “Adicionar à Tela de Início”.</p></div></div>
+      <div><i data-lucide="tablet-smartphone"></i><div><b>Android</b><p class="muted sm">No Chrome: menu ⋮ → “Instalar app”.</p></div></div>
+      <div><i data-lucide="laptop"></i><div><b>Computador</b><p class="muted sm">No Chrome/Edge: ícone de instalar na barra de endereço.</p></div></div>
+      <div><i data-lucide="tv"></i><div><b>TV</b><p class="muted sm">Espelhe com Chromecast (Chrome → ⋮ → Transmitir) ou abra o site no navegador da TV.</p></div></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden" role="status"></div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>
