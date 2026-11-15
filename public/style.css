@@ -130,3 +130,12 @@ label.check input{width:auto;margin:0}
   .sheet.browse{height:100dvh;border-radius:0;border:0}
   .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 }
+
+.acct{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute);flex-shrink:0}
+.acct:empty{display:none}
+.gbtn{display:flex;align-items:center;gap:8px;background:#fff;color:#1f1f1f;border:0;font-weight:600}
+.chips .me{border-color:#3a3a55}
+.gridhead{grid-column:1/-1;display:flex;align-items:center;gap:10px}
+.vcard.chan .th{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:var(--panel)}
+.vcard.chan img{width:auto;height:80%;aspect-ratio:1;border-radius:50%}
+.vcard small a{color:var(--text);text-decoration:underline dotted}

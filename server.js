@@ -3,7 +3,7 @@ const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
 const { Server } = require('socket.io');
-const { ytSearch, driveFolder } = require('./yt');
+const { ytSearch, driveFolder, ytChannel, ytFeed } = require('./yt');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,6 +14,16 @@ app.get('/api/yt', async (req, res) => {
   const q = String(req.query.q || '').slice(0, 120).trim();
   if (!q) return res.json([]);
   try { res.json(await ytSearch(q, String(req.query.f || ''))); } catch (e) { res.status(502).json({ error: 'busca falhou' }); }
+});
+app.get('/api/config', (_, res) => res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null }));
+app.get('/api/ytchannel', async (req, res) => {
+  const id = String(req.query.id || '');
+  if (!/^UC[\w-]{22}$/.test(id)) return res.status(400).json({ error: 'id inválido' });
+  try { res.json(await ytChannel(id)); } catch (e) { res.status(502).json({ error: e.message }); }
+});
+app.post('/api/ytfeed', express.json({ limit: '50kb' }), async (req, res) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(x => /^UC[\w-]{22}$/.test(x)).slice(0, 200);
+  try { res.json(await ytFeed(ids)); } catch (e) { res.status(502).json({ error: 'feed falhou' }); }
 });
 app.get('/api/drive', async (req, res) => {
   const id = String(req.query.id || '');

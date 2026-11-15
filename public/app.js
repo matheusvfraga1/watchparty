@@ -135,10 +135,10 @@ socket.on('react', ({ emoji }) => {
 $$('[data-open-add]').forEach(b => b.onclick = () => {
   if (!canControl()) return toast('Só o anfitrião pode trocar o vídeo');
   $('#addModal').classList.remove('hidden');
-  if (!ytLast) $('#ytChips button').click();
+  ytFirstLoad();
 });
 $$('[data-close]').forEach(b => b.onclick = () => b.closest('.modal').classList.add('hidden'));
-$$('.modal').forEach(m => m.onclick = e => e.target === m && m.classList.add('hidden'));
+$$('.modal').forEach(m => m.onclick = e => { if (e.target === m) m.classList.add('hidden'); });
 $$('.src-tabs button').forEach(b => b.onclick = () => {
   $$('.src-tabs button').forEach(x => x.classList.toggle('on', x === b));
   $$('.src-body').forEach(x => x.classList.toggle('hidden', x.dataset.body !== b.dataset.src));
@@ -154,7 +154,7 @@ const playYT = (id, title) => { socket.emit('media:set', { type: 'youtube', src:
 const playDrive = (id, title) => { socket.emit('media:set', { type: 'video', src: `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`, title: title || 'Google Drive', kind: 'drive' }); closeAdd(); };
 const api = (u) => fetch(u).then(r => r.ok ? r.json() : Promise.reject(new Error('erro')));
 
-// YouTube: busca e categorias
+// YouTube: busca, canais, categorias e conta Google
 const CHIPS = [
   ['🎬 Filmes completos', 'filme completo dublado', 'long'], ['🍿 Lançamentos', 'filme lançamento 2026 completo dublado', 'long'],
   ['😂 Comédia', 'filme de comédia completo dublado', 'long'], ['💥 Ação', 'filme de ação completo dublado', 'long'],
@@ -163,21 +163,57 @@ const CHIPS = [
   ['⚽ Futebol', 'melhores momentos futebol', 'video'], ['🔴 Ao vivo', 'ao vivo agora', 'live'],
 ];
 let ytLast = null;
+const ytBox = () => $('#ytResults');
+const setChip = (chip) => $$('#ytChips button').forEach(b => b.classList.toggle('on', b === chip));
+const fmtDate = (d) => { if (!d) return ''; const s = (Date.now() - new Date(d)) / 1000; return s < 3600 ? `há ${Math.max(1, s / 60 | 0)} min` : s < 86400 ? `há ${s / 3600 | 0} h` : s < 86400 * 30 ? `há ${s / 86400 | 0} d` : new Date(d).toLocaleDateString('pt-BR'); };
+const isoDur = (p) => { const m = String(p || '').match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/); if (!m) return ''; const [h, mi, s] = [m[1] | 0, m[2] | 0, m[3] | 0]; return (h ? h + ':' + String(mi).padStart(2, '0') : mi) + ':' + String(s).padStart(2, '0'); };
+
+async function ytTask(key, fn) {
+  ytLast = key; ytBox().innerHTML = '<div class="loading">Carregando...</div>';
+  let items, err;
+  for (let k = 0; k < 3; k++) { try { items = await fn(); break; } catch (e) { err = e; if (key !== ytLast) return; await new Promise(r => setTimeout(r, 2500)); } }
+  if (key !== ytLast) return;
+  if (!items) return ytBox().innerHTML = `<div class="loading">${esc(err?.message === 'login' ? 'Sua sessão do Google expirou. Entre de novo.' : 'Não deu pra carregar agora. Tente de novo.')}</div>`;
+  renderVideos(items);
+}
+function renderVideos(items, header) {
+  const box = ytBox(); box.innerHTML = '';
+  if (header) box.appendChild(header);
+  if (!items.length) box.insertAdjacentHTML('beforeend', '<div class="loading">Nada encontrado.</div>');
+  items.forEach(v => {
+    const d = document.createElement('div');
+    if (v.type === 'channel') {
+      d.className = 'vcard chan';
+      d.innerHTML = `<div class="th"><img loading="lazy" src="${esc(v.thumb)}" alt=""></div><div class="info"><b>${esc(v.title)}</b><small>Canal${v.subs ? ' · ' + esc(v.subs) : ''}</small></div>`;
+      d.onclick = () => openChannel(v.id, v.title);
+    } else if (v.type === 'playlist') {
+      d.className = 'vcard';
+      d.innerHTML = `<div class="th"><img loading="lazy" src="${esc(v.thumb)}" alt=""><span class="dur">☰ ${v.count ?? ''}</span></div><div class="info"><b>${esc(v.title)}</b><small>Playlist</small></div>`;
+      d.onclick = () => openPlaylist(v.id, v.title);
+    } else {
+      d.className = 'vcard';
+      const badge = v.duration ? `<span class="dur">${esc(v.duration)}</span>` : v.live ? '<span class="dur live">AO VIVO</span>' : '';
+      d.innerHTML = `<div class="th"><img loading="lazy" src="${esc(v.thumb)}" alt="">${badge}</div><div class="info"><b>${esc(v.title)}</b><small>${v.channelId ? `<a data-ch="${esc(v.channelId)}">${esc(v.channel || '')}</a>` : esc(v.channel || '')}${v.views ? ' · ' + esc(v.views) : ''}${v.published ? ' · ' + fmtDate(v.published) : ''}</small></div>`;
+      d.onclick = (e) => { const a = e.target.closest('[data-ch]'); if (a) return openChannel(a.dataset.ch, a.textContent); playYT(v.id, v.title); };
+    }
+    box.appendChild(d);
+  });
+}
+const backHeader = (title, back) => {
+  const h = document.createElement('div'); h.className = 'gridhead';
+  h.innerHTML = `<button class="small">← Voltar</button><b>${esc(title)}</b>`;
+  h.querySelector('button').onclick = back; return h;
+};
+let lastList = null;
 function ytLoad(q, f = 'video', chip) {
-  ytLast = q + f;
-  $$('#ytChips button').forEach(b => b.classList.toggle('on', b === chip));
-  const box = $('#ytResults'); box.innerHTML = '<div class="loading">Carregando...</div>';
-  const key = ytLast;
-  api(`/api/yt?q=${encodeURIComponent(q)}&f=${f}`).then(items => {
-    if (key !== ytLast) return;
-    box.innerHTML = items.length ? '' : '<div class="loading">Nada encontrado.</div>';
-    items.forEach(v => {
-      const d = document.createElement('div'); d.className = 'vcard';
-      d.innerHTML = `<div class="th"><img loading="lazy" src="${esc(v.thumb)}" alt="">${v.duration ? `<span class="dur">${esc(v.duration)}</span>` : v.live ? '<span class="dur live">AO VIVO</span>' : ''}</div><div class="info"><b>${esc(v.title)}</b><small>${esc(v.channel)}${v.views ? ' · ' + esc(v.views) : ''}</small></div>`;
-      d.onclick = () => playYT(v.id, v.title);
-      box.appendChild(d);
-    });
-  }).catch(() => { if (key === ytLast) box.innerHTML = '<div class="loading">Não deu pra buscar agora. Tente de novo.</div>'; });
+  setChip(chip);
+  ytTask(q + f, () => api(`/api/yt?q=${encodeURIComponent(q)}&f=${f}`)).then(() => { lastList = () => ytLoad(q, f, chip); });
+}
+function openChannel(id, title) {
+  const back = lastList; const key = 'ch' + id; ytLast = key;
+  ytBox().innerHTML = '<div class="loading">Carregando canal...</div>';
+  api('/api/ytchannel?id=' + id).then(d => { if (ytLast === key) renderVideos(d.items.map(v => ({ ...v, channelId: null })), backHeader(d.title || title, () => back ? back() : ytLoad('filme completo dublado', 'long'))); })
+    .catch(() => { if (ytLast === key) ytBox().innerHTML = '<div class="loading">Não consegui abrir o canal.</div>'; });
 }
 CHIPS.forEach(([label, q, f]) => {
   const b = document.createElement('button'); b.textContent = label; b.onclick = () => { $('#ytQ').value = ''; ytLoad(q, f, b); };
@@ -188,6 +224,93 @@ $('#ytForm').onsubmit = e => {
   const id = ytId(v); if (id) { $('#ytQ').value = ''; return playYT(id); }
   ytLoad(v, 'video');
 };
+function ytFirstLoad() {
+  if (ytLast) return;
+  if (gToken()) $('#ytChips [data-me=subs]')?.click(); else $('#ytChips button:not([data-me])').click();
+}
+
+// ---- Conta Google (feed próprio) ----
+let gClientId = null, gTokenClient = null;
+const gToken = () => { try { const t = JSON.parse(sessionStorage.getItem('gtok') || 'null'); return t && t.exp > Date.now() ? t.v : null; } catch { return null; } };
+async function gapi(path, params = {}) {
+  const t = gToken(); if (!t) throw new Error('login');
+  const r = await fetch('https://www.googleapis.com/youtube/v3/' + path + '?' + new URLSearchParams(params), { headers: { Authorization: 'Bearer ' + t } });
+  if (r.status === 401) { try { sessionStorage.removeItem('gtok'); } catch {} renderAcct(); throw new Error('login'); }
+  if (!r.ok) throw new Error('api');
+  return r.json();
+}
+const thumbOf = (sn) => sn?.thumbnails?.medium?.url || sn?.thumbnails?.default?.url || '';
+async function mySubs() {
+  let ids = [], page = '';
+  for (let k = 0; k < 4; k++) {
+    const d = await gapi('subscriptions', { part: 'snippet', mine: 'true', maxResults: 50, order: 'relevance', ...(page && { pageToken: page }) });
+    ids.push(...d.items.map(i => ({ id: i.snippet.resourceId.channelId, title: i.snippet.title, thumb: thumbOf(i.snippet) })));
+    page = d.nextPageToken; if (!page) break;
+  }
+  return ids;
+}
+let subsCache = null;
+const loaders = {
+  subs: async () => {
+    subsCache = subsCache || await mySubs();
+    if (!subsCache.length) return [];
+    const feed = await fetch('/api/ytfeed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: subsCache.map(s => s.id) }) }).then(r => r.ok ? r.json() : Promise.reject(new Error('feed')));
+    return feed.filter(v => !v.short).map(v => ({ ...v, channelId: subsCache.find(s => s.title === v.channel)?.id }));
+  },
+  channels: async () => { subsCache = subsCache || await mySubs(); return subsCache.map(s => ({ type: 'channel', ...s })); },
+  liked: async () => {
+    const d = await gapi('videos', { part: 'snippet,contentDetails', myRating: 'like', maxResults: 50 });
+    return d.items.map(v => ({ id: v.id, title: v.snippet.title, channel: v.snippet.channelTitle, channelId: v.snippet.channelId, thumb: thumbOf(v.snippet), duration: isoDur(v.contentDetails?.duration) }));
+  },
+  playlists: async () => {
+    const d = await gapi('playlists', { part: 'snippet,contentDetails', mine: 'true', maxResults: 50 });
+    return d.items.map(p => ({ type: 'playlist', id: p.id, title: p.snippet.title, thumb: thumbOf(p.snippet), count: p.contentDetails?.itemCount }));
+  },
+};
+async function openPlaylist(id, title) {
+  const back = lastList; const key = 'pl' + id; ytLast = key;
+  ytBox().innerHTML = '<div class="loading">Carregando playlist...</div>';
+  try {
+    const d = await gapi('playlistItems', { part: 'snippet', playlistId: id, maxResults: 50 });
+    if (ytLast !== key) return;
+    renderVideos(d.items.filter(i => i.snippet.resourceId?.videoId && thumbOf(i.snippet)).map(i => ({ id: i.snippet.resourceId.videoId, title: i.snippet.title, channel: i.snippet.videoOwnerChannelTitle, channelId: i.snippet.videoOwnerChannelId, thumb: thumbOf(i.snippet) })), backHeader(title, () => back && back()));
+  } catch { if (ytLast === key) ytBox().innerHTML = '<div class="loading">Não consegui abrir a playlist.</div>'; }
+}
+const ME_CHIPS = [['subs', '📺 Inscrições'], ['channels', '👤 Meus canais'], ['liked', '👍 Curtidos'], ['playlists', '📂 Playlists']];
+function renderAcct() {
+  const box = $('#ytAcct');
+  $$('#ytChips [data-me]').forEach(b => b.remove());
+  if (!gClientId) { box.innerHTML = ''; return; }
+  if (gToken()) {
+    box.innerHTML = '<span>✅ Conectado ao YouTube</span><button class="small" id="gOut">Sair</button>';
+    $('#gOut').onclick = () => { try { google.accounts.oauth2.revoke(gToken()); sessionStorage.removeItem('gtok'); } catch {} subsCache = null; renderAcct(); ytLast = null; ytFirstLoad(); };
+    [...ME_CHIPS].reverse().forEach(([k, label]) => {
+      const b = document.createElement('button'); b.dataset.me = k; b.textContent = label; b.className = 'me';
+      b.onclick = () => { setChip(b); $('#ytQ').value = ''; ytTask('me' + k, loaders[k]).then(() => { lastList = () => b.click(); }); };
+      $('#ytChips').prepend(b);
+    });
+  } else {
+    box.innerHTML = '<button class="gbtn" id="gIn"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Entrar com Google para ver seu feed</button>';
+    $('#gIn').onclick = gLogin;
+  }
+}
+function gLogin() {
+  if (!window.google?.accounts?.oauth2) return toast('Carregando login do Google, tente de novo em 2s');
+  gTokenClient = gTokenClient || google.accounts.oauth2.initTokenClient({
+    client_id: gClientId, scope: 'https://www.googleapis.com/auth/youtube.readonly',
+    callback: (r) => {
+      if (!r.access_token) return toast('Login cancelado');
+      try { sessionStorage.setItem('gtok', JSON.stringify({ v: r.access_token, exp: Date.now() + (r.expires_in - 60) * 1000 })); } catch {}
+      subsCache = null; renderAcct(); $('#ytChips [data-me=subs]').click();
+    },
+  });
+  gTokenClient.requestAccessToken();
+}
+fetch('/api/config').then(r => r.json()).then(c => {
+  gClientId = c.googleClientId; if (!gClientId) return;
+  const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true; document.head.appendChild(s);
+  renderAcct();
+}).catch(() => {});
 
 // Streaming: atalhos
 const SERVICES = [
