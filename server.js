@@ -15,7 +15,7 @@ app.get('/api/yt', async (req, res) => {
   if (!q) return res.json([]);
   try { res.json(await ytSearch(q, String(req.query.f || ''))); } catch (e) { res.status(502).json({ error: 'busca falhou' }); }
 });
-app.get('/api/config', (_, res) => res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || null }));
+app.get('/api/config', (_, res) => res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || '133466939057-nilr08en6alqbq8q54oeottkcfghgivt.apps.googleusercontent.com' }));
 app.get('/api/ytchannel', async (req, res) => {
   const id = String(req.query.id || '');
   if (!/^UC[\w-]{22}$/.test(id)) return res.status(400).json({ error: 'id inválido' });
