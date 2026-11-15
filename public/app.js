@@ -737,25 +737,68 @@ function stopStreaming(silent) {
 // ---------- APP INSTALÁVEL ----------
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 let installEvt = null;
-const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+// de onde o app foi aberto (instalador Android/Windows passam ?source=...&v=...)
+const qs = new URLSearchParams(location.search);
+try { if (qs.get('source')) sessionStorage.setItem('appSrc', JSON.stringify({ s: qs.get('source'), v: +qs.get('v') || 0 })); } catch {}
+const appSrc = (() => { try { return JSON.parse(sessionStorage.getItem('appSrc') || 'null'); } catch { return null; } })();
+if (qs.get('source')) history.replaceState(null, '', location.pathname);
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone || (appSrc && appSrc.s !== 'app');
 if (!standalone) $('#installBtn').classList.remove('hidden');
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
 window.addEventListener('appinstalled', () => { $('#installBtn').classList.add('hidden'); toast('App instalado!'); });
-$('#installBtn').onclick = async () => {
-  if (installEvt) { installEvt.prompt(); const r = await installEvt.userChoice; if (r.outcome === 'accepted') $('#installBtn').classList.add('hidden'); installEvt = null; }
-  else {
-    // mostra só a instrução do aparelho/navegador atual
-    const ua = navigator.userAgent, ios = /iPhone|iPad|iPod/.test(ua), android = /Android/.test(ua), tv = /TV|SMART-TV|SmartTV|AFT|CrKey|Web0S|Tizen/i.test(ua);
-    const opera = /OPR\/|Opera/.test(ua), firefox = /Firefox/.test(ua), samsung = /SamsungBrowser/.test(ua), edge = /Edg\//.test(ua);
-    let k, msg;
-    if (tv) { k = 'tv'; msg = 'Na TV, use o site direto pelo navegador dela, ou espelhe do celular/PC com Chromecast.'; }
-    else if (ios) { k = 'iphone'; msg = /CriOS|FxiOS|OPT\//.test(ua) ? 'No iPhone, abra este site no Safari e toque em Compartilhar → “Adicionar à Tela de Início”.' : 'Toque no botão Compartilhar (quadrado com seta) → “Adicionar à Tela de Início”.'; }
-    else if (android) { k = 'android'; msg = samsung ? 'Toque no menu ☰ → “Adicionar página a” → “Tela inicial”.' : firefox || opera ? 'Toque no menu ⋮ → “Adicionar à tela inicial”.' : 'Toque no menu ⋮ → “Instalar app” ou “Adicionar à tela inicial”.'; }
-    else { k = 'pc'; msg = opera || firefox ? `O ${opera ? 'Opera' : 'Firefox'} não instala apps no computador. Abra ${location.host} no Chrome ou Edge e clique em “Instalar app”.` : edge ? 'Clique no ícone de instalar na barra de endereço, ou menu ⋯ → Apps → “Instalar Watch Party”.' : 'Clique no ícone de instalar na barra de endereço, ou menu ⋮ → “Transmitir, salvar e compartilhar” → “Instalar página como app”.'; }
-    $('#installMsg').textContent = msg;
-    $('#installModal').classList.remove('hidden');
-  }
+
+const UA = navigator.userAgent, isIOS = /iPhone|iPad|iPod/.test(UA) || (/Macintosh/.test(UA) && 'ontouchend' in document), isAndroid = /Android/.test(UA);
+const device = isIOS ? 'ios' : isAndroid ? 'android' : 'pc';
+function installHelp(msg) { $('#installMsg').textContent = msg; $('#installModal').classList.remove('hidden'); }
+function installPC() {
+  if (installEvt) { installEvt.prompt(); installEvt.userChoice.then(r => { if (r.outcome === 'accepted') toast('App instalado!'); }); installEvt = null; return; }
+  const opera = /OPR\//.test(UA), firefox = /Firefox/.test(UA), edge = /Edg\//.test(UA);
+  if (device !== 'pc') return installHelp(`No computador, abra ${location.host} no Chrome ou Edge e clique em “Baixar app” → Computador.`);
+  installHelp(opera || firefox
+    ? `O ${opera ? 'Opera' : 'Firefox'} não instala apps. Abra ${location.host} no Chrome ou Edge (o Edge já vem no Windows) e clique em “Baixar app” → Computador.`
+    : edge ? 'Clique no ícone de instalar na barra de endereço, ou menu ⋯ → Apps → “Instalar Watch Party”.'
+    : 'Clique no ícone de instalar na barra de endereço, ou menu ⋮ → “Transmitir, salvar e compartilhar” → “Instalar página como app”.');
+}
+const INSTALL_OPTS = [
+  { k: 'android', icon: 'smartphone', title: 'Android e Android TV', sub: 'Baixar .apk', run: () => { location.href = '/downloads/WatchParty.apk'; toast('Abra o arquivo baixado e permita instalar. Se pedir, libere “instalar apps desconhecidos”.', 7000); } },
+  { k: 'pc', icon: 'laptop', title: 'Computador', sub: 'Windows, Mac ou Linux', run: installPC },
+  { k: 'ios', icon: 'tablet-smartphone', title: 'iPhone e iPad', sub: 'Pela tela de início', run: () => installHelp(/CriOS|FxiOS|OPT\//.test(UA) || !isIOS ? 'No iPhone, abra este site no Safari, toque em Compartilhar (quadrado com seta) → “Adicionar à Tela de Início”. A Apple não permite baixar apps fora da App Store.' : 'Toque em Compartilhar (quadrado com seta) → “Adicionar à Tela de Início”. A Apple não permite baixar apps fora da App Store.') },
+];
+function closeInstallMenu() { $('#installMenu')?.remove(); }
+$('#installBtn').onclick = (e) => {
+  e.stopPropagation();
+  if ($('#installMenu')) return closeInstallMenu();
+  const m = document.createElement('div'); m.id = 'installMenu'; m.className = 'menu'; m.setAttribute('role', 'menu');
+  [...INSTALL_OPTS].sort((a, b) => (b.k === device) - (a.k === device)).forEach(o => {
+    const b = document.createElement('button'); b.setAttribute('role', 'menuitem');
+    b.innerHTML = `<i data-lucide="${o.icon}"></i><span><b>${o.title}</b><small>${o.sub}</small></span>${o.k === device ? '<span class="badge">este aparelho</span>' : ''}`;
+    b.onclick = () => { closeInstallMenu(); o.run(); };
+    m.appendChild(b);
+  });
+  $('#installBtn').parentElement.appendChild(m);
+  m.querySelector('button').focus();
 };
+document.addEventListener('click', e => { if (!e.target.closest('#installMenu')) closeInstallMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeInstallMenu(); });
+
+// ---------- AVISO DE ATUALIZAÇÃO ----------
+let webBuild = null;
+function updateBanner(text, label, act) {
+  if ($('#updBar')) return;
+  const d = document.createElement('div'); d.id = 'updBar'; d.className = 'updbar';
+  d.innerHTML = `<i data-lucide="sparkles"></i><span>${text}</span><button class="btn btn-primary btn-sm">${label}</button><button class="btn btn-ghost btn-icon btn-sm" aria-label="Fechar"><i data-lucide="x"></i></button>`;
+  const [go, close] = d.querySelectorAll('button'); go.onclick = act; close.onclick = () => d.remove();
+  document.body.appendChild(d);
+}
+function checkUpdate() {
+  fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(v => {
+    if (appSrc?.s === 'android' && v.android > appSrc.v) updateBanner('Nova versão do app disponível.', 'Baixar', () => { location.href = '/downloads/WatchParty.apk'; });
+    if (webBuild && v.web !== webBuild) updateBanner('O Watch Party foi atualizado.', 'Atualizar', () => location.reload());
+    webBuild = webBuild || v.web;
+  }).catch(() => {});
+}
+checkUpdate(); setInterval(checkUpdate, 10 * 60e3);
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && checkUpdate());
 
 // ---------- BOOT ----------
 const m = location.pathname.match(/^\/r\/([\w-]+)/);

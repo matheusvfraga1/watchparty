@@ -9,6 +9,15 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { maxHttpBufferSize: 1e6 });
 
+// versões: aumente APP_VERSIONS.android ao publicar um APK novo (mesmo versionCode do app/build.gradle)
+const APP_VERSIONS = { android: 1 };
+const WEB_BUILD = process.env.RENDER_GIT_COMMIT || String(Date.now());
+app.get('/api/version', (_, res) => res.set('Cache-Control', 'no-store').json({ ...APP_VERSIONS, web: WEB_BUILD }));
+app.get('/.well-known/assetlinks.json', (_, res) => res.json([{
+  relation: ['delegate_permission/common.handle_all_urls'],
+  target: { namespace: 'android_app', package_name: 'app.watchparty', sha256_cert_fingerprints: ['D6:4F:D9:6E:3F:82:17:91:12:8A:EA:C7:66:5C:3E:FB:A7:9F:89:FB:D9:2C:DD:69:3B:53:BA:4B:73:B6:A4:E6'] },
+}]));
+app.get('/downloads/WatchParty.apk', (_, res) => res.download(path.join(__dirname, 'public', 'downloads', 'WatchParty.apk'), 'WatchParty.apk', { headers: { 'Content-Type': 'application/vnd.android.package-archive' } }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/yt', async (req, res) => {
   const q = String(req.query.q || '').slice(0, 120).trim();

@@ -235,3 +235,13 @@ h1,h2,h3{margin:0;letter-spacing:-.02em}
 .steps p{margin:0}
 .qual{height:32px;border-radius:var(--radius);border:1px solid var(--border);background:var(--background);color:var(--foreground);padding:0 8px;font:inherit;font-size:13px;cursor:pointer}
 .install-msg{margin:0;font-size:15px;line-height:1.5}
+.nav{position:relative}
+.menu{position:absolute;right:0;top:54px;z-index:25;min-width:280px;background:var(--popover);border:1px solid var(--border);border-radius:12px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:2px;animation:drop .14s ease-out}
+@keyframes drop{from{opacity:0;transform:translateY(-6px)}}
+.menu button{display:flex;align-items:center;gap:12px;text-align:left;padding:10px;border:0;background:none;border-radius:8px;cursor:pointer;width:100%}
+.menu button:hover,.menu button:focus-visible{background:var(--accent);outline:none}
+.menu button>svg{width:18px;height:18px;color:var(--muted-fg)}
+.menu b{display:block;font-weight:500;font-size:14px}
+.menu small{display:block;color:var(--muted-fg);font-size:12px}
+.menu span:not(.badge){flex:1}
+.updbar{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:10px;background:var(--popover);border:1px solid var(--border);border-radius:12px;padding:8px 8px 8px 14px;box-shadow:0 12px 40px rgba(0,0,0,.6);font-size:13px;max-width:calc(100vw - 32px)}

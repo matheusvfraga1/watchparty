@@ -1,0 +1,24 @@
+plugins { id 'com.android.application' }
+def ks = rootProject.file('release.jks')
+android {
+  namespace 'app.watchparty'
+  compileSdk 34
+  defaultConfig {
+    applicationId 'app.watchparty'
+    minSdk 21
+    targetSdk 34
+    versionCode 1
+    versionName '1.0'
+  }
+  signingConfigs {
+    release {
+      storeFile ks
+      storePassword System.getenv('WP_KS_PASS')
+      keyAlias 'watchparty'
+      keyPassword System.getenv('WP_KS_PASS')
+    }
+  }
+  buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
+  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0' }
