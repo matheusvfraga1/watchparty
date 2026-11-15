@@ -759,10 +759,10 @@ function installPC() {
   if (installEvt) { installEvt.prompt(); installEvt.userChoice.then(r => { if (r.outcome === 'accepted') toast('App instalado!'); }); installEvt = null; return; }
   // navegador sem instalação de app (Opera, Firefox, Safari...): baixa um atalho com o ícone do Watch Party
   const mac = /Macintosh|Mac OS X/.test(UA), linux = /Linux/.test(UA) && !isAndroid;
-  if (device === 'pc') location.href = '/downloads/' + (mac ? 'WatchParty.webloc' : linux ? 'watch-party.desktop' : 'WatchParty.url');
+  if (device === 'pc') location.href = '/downloads/' + (mac ? 'WatchParty-Mac.zip' : 'WatchParty-PC.zip');
   installHelp(device !== 'pc' ? `No computador, abra ${location.host} e clique em “Baixar app” → Computador.`
-    : mac ? 'Baixamos o atalho do Watch Party. Arraste o arquivo para a Mesa ou para o Dock e abra por ele.'
-    : 'Baixamos o atalho do Watch Party. Arraste o arquivo “WatchParty” dos Downloads para a área de trabalho e abra por ele. Para abrir numa janela própria, sem abas, instale pelo Chrome ou Edge (o Edge já vem no Windows).');
+    : mac ? 'Baixou o WatchParty-Mac.zip. Abra ele e arraste o “Watch Party” para a Mesa ou para o Dock.'
+    : 'Baixou o WatchParty-PC.zip. Abra ele e arraste o “Watch Party” para a área de trabalho. Pronto: é só abrir por ali.');
 }
 const INSTALL_OPTS = [
   { k: 'android', icon: 'smartphone', title: 'Android e Android TV', sub: 'Baixar .apk', run: () => { location.href = '/downloads/WatchParty.apk'; toast('Abra o arquivo baixado e permita instalar. Se pedir, libere “instalar apps desconhecidos”.', 7000); } },
